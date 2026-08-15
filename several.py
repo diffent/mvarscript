@@ -1,4 +1,3 @@
-#/usr/bin/python2.7 -u 
 # originally developed for py 2.7, auto converted to 3.11 then comment out unworking grid stuff in plots
 
 # dev Feb 19 2014
