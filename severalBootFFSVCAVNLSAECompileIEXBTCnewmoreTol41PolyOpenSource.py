@@ -283,6 +283,8 @@ if nargs < 2:
   print("option:  model1minabs=0 if 1 use min abs residual solve for model 1")
   print("option:  diffvol=1 if 1 daily difference the volatility, if 0 do not daily difference the volatility")
 
+  print("note:  create an empty file named 'running' in the run directory before starting; delete it to stop the run (remote kill switch, no process-kill permission needed)")
+
   print("more options may be available, see related iOS app")
   sys.exit(0)
 
