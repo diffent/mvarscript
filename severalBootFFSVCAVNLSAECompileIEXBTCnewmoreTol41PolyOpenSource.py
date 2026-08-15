@@ -174,7 +174,7 @@ useopen = True
 windowsize = 200 
 ntrials = 9 # will run 1 more since starts at zero 
 neighbors = 20
-coolrate = 0 # model 1 solver: 0 fast anneal (dwell=1), 1 slow anneal, 2 slow anneal (output labeled BFGS), 3 force BFGS no anneal; anneal only on legacy py2.7.3 scipy else BFGS
+coolrate = 0 # fast 1 = slow 2 = (not anneal at all, minabs diff), 3 = BFGS (not anneal)
 noboot=1 # if 1 skip boot run nominal
 larsalpha=100
 knnvarcutoff=50 # percent times 10
@@ -201,6 +201,7 @@ m3ZTol=0
 
 model1minabs=0
 
+# not a cmd line arg yet
 diffvol=1 # 0 do not daily difference the volatility, 1 daily difference the volatility
 
 normalize=0
@@ -254,9 +255,9 @@ if nargs < 2:
   print("option:  uselogit=[1|0]")
   print("option:  uselars=[1|0]")
   print("option:  useopen=[1|0]") 
-  print("option:  coolrate=0 model 1 solver schedule: 0=fast anneal (dwell=1), 1=slow anneal (default dwell), 2=slow anneal (output labeled BFGS), 3=force BFGS optimizer no anneal; simulated annealing only runs on legacy py2.7.3 scipy, on modern python all values use BFGS")
+  print("option:  coolrate=[0|1] 0 is fast 1 is slow (need to add more info here for 2 and 3)")
   print("option:  windowsize=200 points to include in regression")
-  print("option:  ntrials=9 number of back test days minus one (loop starts at 0, so it runs ntrials+1 days; default 9 runs 10 days)")
+  print("option:  ntrials=10 number of back test days")
   print("option:  neighbors=20 number of points in knearest calc if used")  
   print("option:  epsilon1000=2000 multiquadric param x 1000")
   print("option:  exponent=2.0 multiquadric exponent")
@@ -275,13 +276,6 @@ if nargs < 2:
   print("option:  polyiokey=undefined your polygon.io data access key for stock data, not needed for crypto only studies")
   print("option:  reuseMergedRaw=0 if 1 re-use data pulled from prior run of this file, symbol list must be same as prior run if 1")
   print("option:  pullDelay=15 (integer) seconds between datapulls to avoid rate limits on polgyon.io free plan, set to 0 for as fast as possible")
-  print("option:  lassolarsbic=0 if 0 use AIC (old default), if 1 use BIC for LassoLars information criterion")
-  print("option:  riskFreeRate=3.0 annual risk free rate in percent used in Sharpe / return calcs")
-  print("option:  m1ZTol=0 model 1 forecast Z tolerance, used for forecasting default (computed during backtest)")
-  print("option:  m2ZTol=0 model 2 forecast Z tolerance, used for forecasting default (computed during backtest)")
-  print("option:  m3ZTol=0 model 3 forecast Z tolerance, used for forecasting default (computed during backtest)")
-  print("option:  model1minabs=0 if 1 use min abs residual solve for model 1")
-  print("option:  diffvol=1 if 1 daily difference the volatility, if 0 do not daily difference the volatility")
 
   print("more options may be available, see related iOS app")
   sys.exit(0)
