@@ -600,59 +600,7 @@ if reuseMergedRaw == 0:
         try:
           # probably can do this more elegantly from above symbol overlap conversion table
           # iex
-          if (symbol.upper() != "BTC" and 
-              symbol.upper() != "ETHM" and 
-              symbol.upper() != "XRP" and 
-              symbol.upper() != "BCH$" and 
-              symbol.upper() != "EOS$" and 
-              symbol.upper() != "ADA$" and 
-              symbol.upper() != "LTC$" and 
-              symbol.upper() != "ZEC" and 
-              symbol.upper() != "XLM" and 
-              symbol.upper() != "IOTA" and 
-              symbol.upper() != "TRX$" and 
-              symbol.upper() != "NEO$" and 
-              symbol.upper() != "XMR" and 
-              symbol.upper() != "DASH" and 
-              symbol.upper() != "USDT" and 
-              symbol.upper() != "XEM" and 
-              symbol.upper() != "VEN" and 
-              symbol.upper() != "BNB" and 
-              symbol.upper() != "ETC" and 
-              symbol.upper() != "ONT" and 
-              symbol.upper() != "QTUM" and 
-              symbol.upper() != "OMG" and 
-              symbol.upper() != "BCN" and 
-              symbol.upper() != "DOGE" and 
-              symbol.upper() != "MIOTA" and 
-
-              symbol.upper() != "SOL$" and 
-              symbol.upper() != "DOT" and 
-              symbol.upper() != "MATIC" and 
-              symbol.upper() != "TRX$" and
-              symbol.upper() != "AVAX" and
-              symbol.upper() != "WBTC" and
-              symbol.upper() != "LEO$" and
-              symbol.upper() != "UNI" and
-              symbol.upper() != "FTT" and
-              symbol.upper() != "CRO" and
-              symbol.upper() != "LINK$" and
-              symbol.upper() != "NEAR$" and
-              symbol.upper() != "ATOM$" and
-              symbol.upper() != "ALGO" and
-              symbol.upper() != "APE" and
-  
-              symbol.upper() != "FLOW" and
-              symbol.upper() != "VET$" and
-              symbol.upper() != "FIL" and
-              symbol.upper() != "ICP" and
-              symbol.upper() != "MANA" and
-              symbol.upper() != "SAND$" and
-              symbol.upper() != "XTZ" and
-              symbol.upper() != "HBAR" and
-              symbol.upper() != "AAVE" and
-              symbol.upper() != "THETA" and
-              symbol.upper() != "QNT" ) :
+          if symbol.upper() not in symlookup:   # crypto symbols are the keys of symlookup; if not crypto, parse as polygon
 
             #iexline = str(diex['date']) + ',' + str(diex['open']) + ',' + str(diex['high']) + ',' + str(diex['low']) + ',' + str(diex['close']) + ',' + str(diex['volume']) + '\n'
 
