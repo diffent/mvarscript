@@ -246,6 +246,9 @@ probtest = prob(3,0.5,4)
 #sys.exit(0)
 
 # SPY should be first for now (or at least output target)
+# initial prototype was to try to forecast SPYCLOSE - SPYOPEN from lagged versions of it and also GLD
+# some hard coding of these names appear in variable names but code is generic now 
+# for symbols specified on command line
 
 theargs = sys.argv
 
@@ -446,7 +449,7 @@ if reuseMergedRaw == 0:
     # ah how sad iex is dead, look how it went thru 2 iterations of API types
 
     pname = "https://api.iextrading.com/1.0/stock/" + symbol + "/chart/5y" 
-    pname = "https://cloud.iexapis.com/stable/stock/" + symbol + "/chart/5y?token=pk_af42e8548aff4b47a37dd41ff5e25e48"
+    pname = "https://cloud.iexapis.com/stable/stock/" + symbol + "/chart/5y?token=pk_xxxx"
 
     #print pname 
 
