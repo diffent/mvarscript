@@ -185,7 +185,7 @@ lassolarsbic=0 # use aic old default
 shareCount=1.0
 costPerTrade=10.0 # dollars
 allowShorting=1
-riskFreeRate=3.0
+riskFreeRate=4.0
 daysWithheld=0
 reuseMergedRaw=0 # if 1, symbol list must be the same as when it was previously run with 0 (0 = full download)
 pullDelay=15 # seconds between pulls to avoid overloading the API if you use polygon.io free plan. 
@@ -282,7 +282,7 @@ if nargs < 2:
   print("option:  reuseMergedRaw=0 if 1 re-use data pulled from prior run of this file, symbol list must be same as prior run if 1")
   print("option:  pullDelay=15 (integer) seconds between datapulls to avoid rate limits on polgyon.io free plan, set to 0 for as fast as possible")
   print("option:  lassolarsbic=0 if 0 use AIC (old default), if 1 use BIC for LassoLars information criterion")
-  print("option:  riskFreeRate=3.0 annual risk free rate in percent used in Sharpe / return calcs")
+  print("option:  riskFreeRate=4.0 annual risk free rate in percent used in Sharpe / return calcs")
   print("option:  m1ZTol=0 model 1 forecast Z tolerance, used for forecasting default (computed during backtest)")
   print("option:  m2ZTol=0 model 2 forecast Z tolerance, used for forecasting default (computed during backtest)")
   print("option:  m3ZTol=0 model 3 forecast Z tolerance, used for forecasting default (computed during backtest)")
