@@ -192,6 +192,8 @@ pullDelay=15 # seconds between pulls to avoid overloading the API if you use pol
 
 polyiokey = 'x'
 
+cryptocomparekey = 'x'
+
 # for forecasting, default
 # for backtest, these are computed
 
@@ -273,6 +275,7 @@ if nargs < 2:
   print("option:  allowShorting=1")
   print("option:  daysWithheld=0")
   print("option:  polyiokey=undefined your polygon.io data access key for stock data, not needed for crypto only studies")
+  print("option:  cryptocomparekey=undefined your cryptocompare.com api key for crypto data, not needed for stock only studies")
   print("option:  reuseMergedRaw=0 if 1 re-use data pulled from prior run of this file, symbol list must be same as prior run if 1")
   print("option:  pullDelay=15 (integer) seconds between datapulls to avoid rate limits on polgyon.io free plan, set to 0 for as fast as possible")
   print("option:  lassolarsbic=0 if 0 use AIC (old default), if 1 use BIC for LassoLars information criterion")
@@ -316,7 +319,7 @@ for arg in theargs:
        print("removing ", origargs[0], " from origargs")
        origargs.pop(0)
 
-       if keyval[0] == 'polyiokey':
+       if keyval[0] == 'polyiokey' or keyval[0] == 'cryptocomparekey':
          locals()[keyval[0]] = keyval[1]
        else:
          #locals()[keyval[0]] = int(keyval[1])
@@ -368,6 +371,7 @@ print("riskFreeRate = ", riskFreeRate)
 
 # comment out for security if output is saved in a log file or otherwise
 print("polyiokey  = ", polyiokey)
+print("cryptocomparekey  = ", cryptocomparekey)
 
 print("pullDelay = ", pullDelay)
  
@@ -466,6 +470,8 @@ if reuseMergedRaw == 0:
     # so we have special versions of these on left column here 
     # to indicate that we want the crypto coin and not the stock market symbol
 
+    # these are the allowed crypto symbols
+
     symlookup = {
       "BTC"  : "BTC",
       "ETHM" : "ETH",
@@ -527,7 +533,7 @@ if reuseMergedRaw == 0:
     isCrypto = False
 
     try: 
-      trypname = 'https://min-api.cryptocompare.com/data/histoday?fsym=' + symlookup[ucasesymbol] + "&tsym=USD&limit=2000"
+      trypname = 'https://min-api.cryptocompare.com/data/histoday?fsym=' + symlookup[ucasesymbol] + "&tsym=USD&limit=2000&api_key=" + cryptocomparekey
       isCrypto = True
     except:
       print("no crypto symbol found, using polygon.io feed")
