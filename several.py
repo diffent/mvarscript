@@ -1621,7 +1621,6 @@ def theobjPreMask(varMask, A):
 for j in range(0, ACOEFFCOUNT):
     A[j] = 0
 
-
 # need to make this generic ncols of regression table - date,output,closeofTarget (-3)
 
 # 1st is constant
