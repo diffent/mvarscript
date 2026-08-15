@@ -1,0 +1,64 @@
+VAR Main Solver — Default Settings Sent to Server
+==================================================
+Analysis based on latest runcmd. Source: VAR/FirstViewController.m (runsolver:),
+VAR/AppDelegate.m (VARURL).
+
+Latest runcmd
+-------------
+cmd = run19iexbtcnewmoretol41poly   (FirstViewController.m:802, active server path)
+
+Endpoint: http://23.23.73.166/varapp?   (AppDelegate.m:16, hard-coded server IP)
+
+Note: the run14...Poly/Fast variants are #if 0'd out; the local tol29 path
+(:806) and legacy run15iexbtc path (:810) are unreachable dead branches.
+
+Full request shape
+------------------
+http://23.23.73.166/varapp?udid=<uuid>&cmd=run19iexbtcnewmoretol41poly
+  &args=useopen=0 polyiokey=<POLYGON_IO_KEY> <ntarg> <TARGET+PREDICTORS, UPPERCASED>
+
+(spaces are %20; polykey defaults to "X" if POLYGON_IO_KEY unset — :789-791)
+
+Default solver settings (args)
+------------------------------
+Param          Default                                              Source (FirstViewController.m)
+-----          -------                                              ------------------------------
+useopen        0                                                    hard-coded literal :802
+ntrials        ntrials.text - 1  (forecast mode forces 0)           :644-646, :633
+coolrate       coolingrate segment (0 fast,1 slow,2 min-abs,3 BFGS) :638
+windowsize     200   if unset/<=0                                   :520
+neighbors      20    if <=1                                         :521
+knnvarcutoff   200   (= 20% x 10) if unset                          :501, :523
+volen          21    if <=0                                         :525
+epsilon100     200   (epsilon 2.0 x 100)                            :505, :512, :654
+exponent       2.0                                                  :506, :514
+residExp       1.0   if blank                                       :629
+m1ZTol/m2ZTol/m3ZTol  last backtest values (0 until backtest runs;  :690
+                      used only for forecast)
+model1minabs   1 if coolrate==2, else 0                             :699-702
+shareCount     from shareCount.text (float)                         :704, :727
+costPerTrade   from costPerTrade.text (float)                       :723, :727
+daysWithheld   0 typical (non-zero blocked on local)                :706, :733
+allowShorting  switch -> 0/1                                        :739-742
+riskFreeRate   3.45 default; appended only when > 0                 :508, :516, :744-751
+normalize      0                                                    :510, :756
+
+Conditionally appended (model-3 type)
+-------------------------------------
+m3type > 0  (LARS-AIC / LARS-BIC)   -> uselogit=0 uselars=1   (:656-660)
+m3type == 2 (Lasso-LARS-BIC)        -> lassolarsbic=1         (:662-666)
+
+Concrete default payload (untuned config, KNC model, shorting off)
+------------------------------------------------------------------
+useopen=0 polyiokey=X ntrials=9 coolrate=0 windowsize=200 neighbors=20
+knnvarcutoff=200 volen=21 epsilon100=200 exponent=2.0 residExp=1.0
+m1ZTol=0.0 m2ZTol=0.0 m3ZTol=0.0 model1minabs=0
+shareCount=<f> costPerTrade=<f> daysWithheld=0 allowShorting=0
+riskFreeRate=3.45 normalize=0 <TARGET PREDICTORS>
+
+Notes
+-----
+- ntrials=9 is only the init literal (:636); overwritten whenever ntrials.text
+  is non-empty, so 9 is never actually sent unless that field is blank.
+- Request is a plain-HTTP synchronous GET with the Polygon.io key in the query
+  string (:789-822) — key travels unencrypted to a hard-coded IP.
