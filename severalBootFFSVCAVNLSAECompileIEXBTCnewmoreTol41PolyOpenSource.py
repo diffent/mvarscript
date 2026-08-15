@@ -678,7 +678,7 @@ if reuseMergedRaw == 0:
 
   print("aligning dates")
 
-  if alignInPython: # orig way to align in python (possibly easier to do w/ pandas but this script was written without pandas)
+  if alignInPython: # orig way to align in python [slow] (possibly easier/faster to do w/ pandas but this script was written without pandas)
 
     print("aligning dates in python")
     for spyrow in spyraw:
@@ -1633,7 +1633,7 @@ for j in range(0, ACOEFFCOUNT):
     A[j] = 0
 
 
-# need to make this generic  ncols of regression table - date,output,closeofTarget (-3)
+# need to make this generic ncols of regression table - date,output,closeofTarget (-3)
 
 # 1st is constant
 
