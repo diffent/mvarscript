@@ -1324,13 +1324,13 @@ scale = 1.0
 forecastrow = 1
 
 # coeffs initial (start w/ constant)
-# are there issues w/ limited array size?
+# use an unusually large fixed size so we don't hit the limited array size issue
 
-A = [0, 0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0]
+ACOEFFCOUNT = 1000
+
+A = []
+for _ in range(ACOEFFCOUNT):
+    A.append(0)
 
 best = A
 bestobj = 0
@@ -1629,25 +1629,9 @@ def theobjPreMask(varMask, A):
 
 #print "range 0 12 ", range(0,12)
 
-for j in range(0, 18+1):
-    A[j] = 0 
+for j in range(0, ACOEFFCOUNT):
+    A[j] = 0
 
-
-B0 = 0
-B1 = 0
-B2 = 0
-B3 = 0
-B4 = 0
-B5 = 0
-B6 = 0
-B7 = 0
-B8 = 0 
-B9 = 0
-B10 = 0
-B11 = 0
-B12 = 0
-
-# may be too many?
 
 # need to make this generic  ncols of regression table - date,output,closeofTarget (-3)
 
