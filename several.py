@@ -920,7 +920,7 @@ regtableo.append(headerlineo)
 # multi symbol case. the other hard coded SPY/GLD lag column indexes from the
 # original setup are gone, superseded by the generic multi symbol table builder.
 
-SPYCO = 1
+CLOSE_MINUS_OPEN_TARGET_COL = 1
 
 #print "mergedraw row zero ", mergedraw[0]
 
@@ -1426,9 +1426,9 @@ def forecast1(A, i):
        fit = fit + A[j]*regtable[i][j+2]
        #print " forecast Xi = ", regtable[i][j+2]
 
-     print("ap = ", regtable[i][SPYCO], " ", fit)
+     print("ap = ", regtable[i][CLOSE_MINUS_OPEN_TARGET_COL], " ", fit)
 
-     if ((fit > 0) and (regtable[i][SPYCO] > 0)) or ((fit < 0) and (regtable[i][SPYCO] < 0)):
+     if ((fit > 0) and (regtable[i][CLOSE_MINUS_OPEN_TARGET_COL] > 0)) or ((fit < 0) and (regtable[i][CLOSE_MINUS_OPEN_TARGET_COL] < 0)):
         correct = 1
         #print "GOOD"
      else:
@@ -1443,10 +1443,10 @@ def forecast1(A, i):
        fit = fit + A[j]*futureXfull[j+2]
        #print " forecast Xi = ", regtable[i][j+2]
 
-     print("ap = ", futureXfull[SPYCO], " ", fit)
+     print("ap = ", futureXfull[CLOSE_MINUS_OPEN_TARGET_COL], " ", fit)
 
      # 1st clause check for string to fix crash during 1 day ahead forecasting in python 3.11
-     if (futureXfull[SPYCO] == 'toforecast' or (fit > 0) and (futureXfull[SPYCO] > 0)) or ((fit < 0) and (futureXfull[SPYCO] < 0)):
+     if (futureXfull[CLOSE_MINUS_OPEN_TARGET_COL] == 'toforecast' or (fit > 0) and (futureXfull[CLOSE_MINUS_OPEN_TARGET_COL] > 0)) or ((fit < 0) and (futureXfull[CLOSE_MINUS_OPEN_TARGET_COL] < 0)):
         correct = 0 
         print("FORECAST NOT TESTED YET")
      else:
@@ -1513,18 +1513,18 @@ def theobjAbsPreMask(varMask,A):
     thedot = numpy.dot(AX[1:ncolsrt-2], regtable_fast[i, 3:ncolsrt])
     fit[i] += thedot
 
-    #if ((fit[i] > 0) and (regtable_fast[i,SPYCO] > 0)) or ((fit[i] < 0) and (regtable_fast[i,SPYCO] < 0)):
+    #if ((fit[i] > 0) and (regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL] > 0)) or ((fit[i] < 0) and (regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL] < 0)):
     #   ncorrect += 1
 
     # verified this is not locked to a binary output yet
-    # print "regtable_fast[i,SPYCO]", regtable_fast[i,SPYCO]
+    # print "regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL]", regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL]
 
-    # absdiff = pow(abs(fit[i] - regtable_fast[i,SPYCO]),3) #*(fit[i] - regtable_fast[i,SPYCO])
+    # absdiff = pow(abs(fit[i] - regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL]),3) #*(fit[i] - regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL])
 
     # use squared diff to test versus analytic linear
-    absdiff = pow(abs(fit[i] - regtable_fast[i,SPYCO]), residExp) # *abs(fit[i] - regtable_fast[i,SPYCO])
+    absdiff = pow(abs(fit[i] - regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL]), residExp) # *abs(fit[i] - regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL])
 
-    localY.append(regtable_fast[i,SPYCO])
+    localY.append(regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL])
     localYHat.append(fit[i])
 
     absdiffsum += absdiff
@@ -1602,7 +1602,7 @@ def theobjPreMask(varMask, A):
 
     #print "nvar = ", nvar
 
-    if ((fit[i] > 0) and (regtable_fast[i,SPYCO] > 0)) or ((fit[i] < 0) and (regtable_fast[i,SPYCO] < 0)):
+    if ((fit[i] > 0) and (regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL] > 0)) or ((fit[i] < 0) and (regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL] < 0)):
        ncorrect += 1
     checksum += fit[i]
 
@@ -1781,7 +1781,7 @@ for forecastrow in range(startrow,ntrials+1):
       row = row + [regtable[i][j]]
       #print "len reg row = ", len(row)
 
-    yrow = regtable[i][SPYCO] 
+    yrow = regtable[i][CLOSE_MINUS_OPEN_TARGET_COL] 
 
     subtable.append(row);
     y.append(yrow);
@@ -2351,11 +2351,11 @@ for forecastrow in range(startrow,ntrials+1):
       larspred = -1
  
   if (forecastrow >= 0): 
-    print("custom ap = ", regtable[forecastrow][SPYCO], " ", larspred) 
+    print("custom ap = ", regtable[forecastrow][CLOSE_MINUS_OPEN_TARGET_COL], " ", larspred) 
   else:
-    print("custom ap = ", futureXfull[SPYCO], " ", larspred)
+    print("custom ap = ", futureXfull[CLOSE_MINUS_OPEN_TARGET_COL], " ", larspred)
 
-  backtestActual.append(regtable[forecastrow][SPYCO])
+  backtestActual.append(regtable[forecastrow][CLOSE_MINUS_OPEN_TARGET_COL])
   backtestForecastM3.append(larspred)
 
   jout["forecast_ahead3"] = larspred
@@ -2365,7 +2365,7 @@ for forecastrow in range(startrow,ntrials+1):
   if (forecastrow<0):
     forecastrow = 0
  
-  if ((larspred > 0) and (regtable[forecastrow][SPYCO] > 0)) or ((larspred < 0) and (regtable[forecastrow][SPYCO] < 0)):
+  if ((larspred > 0) and (regtable[forecastrow][CLOSE_MINUS_OPEN_TARGET_COL] > 0)) or ((larspred < 0) and (regtable[forecastrow][CLOSE_MINUS_OPEN_TARGET_COL] < 0)):
       larscorrect = 1
       #print "GOOD larspred", "forecastrow", forecastrow
   else:
