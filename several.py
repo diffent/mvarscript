@@ -916,21 +916,11 @@ regtableo.append(headerlineo)
 
 # regression table cols
 
-# not used for generic multi symbol case ... this was the initial hard coded setup
-# forecast SPYclose - open as a function of spy & gold lags (also optionally open prices)
+# output/target column index (the value to forecast); still used in the generic
+# multi symbol case. the other hard coded SPY/GLD lag column indexes from the
+# original setup are gone, superseded by the generic multi symbol table builder.
 
 SPYCO = 1
-SPYC  = 2
-SPYC1 = 3
-SPYC2 = 4
-SPYO  = 5
-SPYO1 = 6
-SPYO2 = 7
-GLDC1 = 8
-GLDC2 = 9
-GLDO  = 10
-GLDO1 = 11
-GLDO2 = 12
 
 #print "mergedraw row zero ", mergedraw[0]
 
