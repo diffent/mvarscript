@@ -839,10 +839,6 @@ if len(mergedraw) <= 2:
 # the pattern is 1,4 = open close, the +7 for each additional 
 
 thedate = 0
-spyopen = 1
-spyclose = 4
-gldopen = 8
-gldclose = 11
 
 #regtable = [["date", "spyc-o", "spyclose", "spyclose1", "spyclose2", 
 #                    "spyopen",  "spyopen1",  "spyopen2", 
