@@ -1,4 +1,4 @@
-# originally developed for py 2.7, auto converted to 3.11 then comment out unworking grid stuff in plots
+# originally developed for py 2.7, auto converted to 3.11 then comment out unworking grid stuff in plots, fix later, not critical
 
 # dev Feb 19 2014
 
@@ -17,6 +17,9 @@
 # so that is just a shorthand notation
 
 # several inputs from list
+
+# some vestigial variable name and comment references to spy and gld when this module started out
+# as simply a predictor of SPY from SPY and GLD
 
 import numpy
 import pandas as pd
@@ -147,6 +150,7 @@ annealToUse = 'BFGS'
 
 alignInPython = True # off py 2.7 server, align in python direct
 
+# now that we are in python 3.x... can use modern pandas
 # alternate date alignment done with pandas (good for this type of work).
 # checked inside the alignInPython block: when alignInPython is True, setting
 # this True overrides the original row-by-row python alignment with the pandas
@@ -287,7 +291,7 @@ if nargs < 2:
   print("option:  polyiokey=undefined your polygon.io data access key for stock data, not needed for crypto only studies")
   print("option:  cryptocomparekey=undefined your cryptocompare.com api key for crypto data, not needed for stock only studies")
   print("option:  reuseMergedRaw=0 if 1 re-use data pulled from prior run of this file, symbol list must be same as prior run if 1")
-  print("option:  pullDelay=15 (integer) seconds between datapulls to avoid rate limits on polgyon.io free plan, set to 0 for as fast as possible")
+  print("option:  pullDelay=15 (integer) seconds between data pulls to avoid rate limits on polgyon.io free plan, set to 0 for as fast as possible")
   print("option:  lassolarsbic=0 if 0 use AIC (old default), if 1 use BIC for LassoLars information criterion")
   print("option:  riskFreeRate=4.0 annual risk free rate in percent used in Sharpe / return calcs")
   print("option:  m1ZTol=0 model 1 forecast Z tolerance, used for forecasting default (computed during backtest)")
