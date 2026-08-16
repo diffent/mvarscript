@@ -1,3 +1,7 @@
+Claude analysis of calling ObjC code from client app.
+
+Note:  http URL endpoints no longer in service.
+
 VAR Main Solver — Default Settings Sent to Server
 ==================================================
 Analysis based on latest runcmd. Source: VAR/FirstViewController.m (runsolver:),
