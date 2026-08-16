@@ -19,6 +19,7 @@
 # several inputs from list
 
 import numpy
+import pandas as pd
 import scipy.optimize
 import os
 import time
@@ -145,8 +146,15 @@ annealToUse = 'BFGS'
 # note:  alignInPython must be used unless the compiled program that does file timestamp alignment is available
 
 alignInPython = True # off py 2.7 server, align in python direct
+
+# alternate date alignment done with pandas (good for this type of work).
+# checked inside the alignInPython block: when alignInPython is True, setting
+# this True overrides the original row-by-row python alignment with the pandas
+# version. the original code is kept (in the else) for testing/experimentation.
+alignInPandas = True
+
 if sys.version.startswith('2.7.3'):
-  annealToUse = 'Anneal'   
+  annealToUse = 'Anneal'
   alignInPython = False # on py 2.7 server, can use compiled version
 
 if skipio == False:
@@ -682,77 +690,113 @@ if reuseMergedRaw == 0:
 
   if alignInPython: # orig way to align in python [slow] (possibly easier/faster to do w/ pandas but this script was written without pandas)
 
-    print("aligning dates in python")
-    for spyrow in spyraw:
-      thedate = spyrow[0]
+    if alignInPandas:
+      print("aligning dates in pandas")
 
-      if debug:
-        print("for date ", thedate, "\r", end=' ')
-
-      jout["status"] = "aligning data at " + thedate
-
+      jout["status"] = "aligning data (pandas)"
       if skipio == False:
         with open("status", "w") as outfile:
           json.dump(jout, outfile)
 
-      if not os.path.exists("running"):
-        print("user terminated process")
-        jout["status"] = "user terminated process"
-        jout["alldone"] = "1"    
-        with open("status", "w") as outfile:
-          json.dump(jout, outfile)
+      # build one DataFrame per symbol, keeping every column including each
+      # symbol's own date column, so a merged row matches the alignInPython
+      # concatenation (one full csv row per symbol). an inner join on the date
+      # column keeps only dates present in ALL symbols, ordered by the first
+      # symbol -- same result as the original row-by-row loop.
+      aligndfs = []
+      alignsymcols = []
+      for icsv in range(nsymbols):
+        df = pd.DataFrame(allraw[icsv])
+        colnames = ["s" + str(icsv) + "_" + str(j) for j in range(df.shape[1])]
+        df.columns = colnames
+        df["aligndate"] = df[colnames[0]] # join key = this symbol's date col
+        aligndfs.append(df)
+        alignsymcols.append(colnames)
 
-        sys.exit(0)
+      mergeddf = aligndfs[0]
+      for icsv in range(1, nsymbols):
+        mergeddf = mergeddf.merge(aligndfs[icsv], on="aligndate", how="inner", sort=False)
 
-      found = 0
-      
-      # not necessarily gldraw, just the next symbol 
+      # keep the per-symbol columns in symbol order, drop the join key
+      alignorderedcols = []
+      for colnames in alignsymcols:
+        alignorderedcols = alignorderedcols + colnames
 
-      icsv = 0
+      mergedraw = mergeddf[alignorderedcols].values.tolist()
 
-      for symbol in symbols:
+    else:
 
-        gldraw = allraw[icsv] # here is where to index
+      print("aligning dates in python")
+      for spyrow in spyraw:
+        thedate = spyrow[0]
 
-        if icsv == 0:
-          #print "don't merge 1st reference csv"
+        if debug:
+          print("for date ", thedate, "\r", end=' ')
+
+        jout["status"] = "aligning data at " + thedate
+
+        if skipio == False:
+          with open("status", "w") as outfile:
+            json.dump(jout, outfile)
+
+        if not os.path.exists("running"):
+          print("user terminated process")
+          jout["status"] = "user terminated process"
+          jout["alldone"] = "1"    
+          with open("status", "w") as outfile:
+            json.dump(jout, outfile)
+
+          sys.exit(0)
+
+        found = 0
+
+        # not necessarily gldraw, just the next symbol 
+
+        icsv = 0
+
+        for symbol in symbols:
+
+          gldraw = allraw[icsv] # here is where to index
+
+          if icsv == 0:
+            #print "don't merge 1st reference csv"
+            icsv += 1
+            continue
+
+          #print "merging ", symbol
+
+          #print "gldraw is:"
+          #print gldraw
+
+          for gldrow in gldraw:
+            if thedate == gldrow[0]:
+              if icsv == 1:
+                mergedrow = spyrow + gldrow
+                #print "first merge row len = ", len(mergedrow)
+              else:
+                mergedrow = mergedrow + gldrow
+                #print "next merge row len = ", len(mergedrow)
+
+              # orig loc:  mergedraw.append(mergedrow)
+              found = 1
+              break
+
+          # move away from here for multifile
+          #mergedraw.append(mergedrow)
+
+          #if found == 0:
+          #  print "gldrow not found for ", thedate
+
           icsv += 1
-          continue
-      
-        #print "merging ", symbol
 
-        #print "gldraw is:"
-        #print gldraw
-    
-        for gldrow in gldraw:
-          if thedate == gldrow[0]:
-            if icsv == 1:
-              mergedrow = spyrow + gldrow
-              #print "first merge row len = ", len(mergedrow)
-            else:
-              mergedrow = mergedrow + gldrow
-              #print "next merge row len = ", len(mergedrow)
-
-            # orig loc:  mergedraw.append(mergedrow)
-            found = 1
-            break
-
-        # move away from here for multifile
-        #mergedraw.append(mergedrow)
-
-        #if found == 0:
-        #  print "gldrow not found for ", thedate
-        
-        icsv += 1
-
-      # move to here for multifile
-      # 7 columns per csv from yahoo finance (6 google)
-      if len(mergedrow) == (6*nsymbols): 
-        #print "appending after row ", len(mergedraw)
-        mergedraw.append(mergedrow)
-      else:
-        dum = 1
-        #print thedate, " skipping merge, line too short"
+        # move to here for multifile
+        # 7 columns per csv from yahoo finance (6 google)
+        if len(mergedrow) == (6*nsymbols): 
+          #print "appending after row ", len(mergedraw)
+          mergedraw.append(mergedrow)
+        else:
+          dum = 1
+          #print thedate, " skipping merge, line too short"
 
   else: # compiled (C) date align (.cpp really)
 
