@@ -10,6 +10,8 @@ https://medium.com/@nttp/intro-to-the-market-vector-auto-regression-application-
 https://medium.com/@nttp/market-vector-auto-regression-from-the-command-line-75634b135cec
 https://medium.com/@nttp/basic-parameter-scans-of-a-market-vector-auto-regression-model-56b2fc863716
 
+There is an example run-defaults.sh file to show how to call this script with proper args.
+
 Here's a high-level description of several.py.
   
   What it is:
