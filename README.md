@@ -2,6 +2,14 @@ A description of this code from Cladue Code so you don't have to use tokens.
 Modifed by a human, the original code writer, for clarity and to provide additional information and suggestions.
 Claude got it though.  Wow.  This was expected , for the current state of AI.  
 
+Theory:
+https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4137779
+
+Practice:
+https://medium.com/@nttp/intro-to-the-market-vector-auto-regression-application-46ad7cee02b8
+https://medium.com/@nttp/market-vector-auto-regression-from-the-command-line-75634b135cec
+https://medium.com/@nttp/basic-parameter-scans-of-a-market-vector-auto-regression-model-56b2fc863716
+
 Here's a high-level description of several.py.
   
   What it is:
