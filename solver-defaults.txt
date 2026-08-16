@@ -1,6 +1,8 @@
-Claude analysis of calling ObjC code from client app.
+Claude Code analysis of calling ObjC code from client app.
 
 Note:  http URL endpoints no longer in service.
+
+This was done pre-cleanup to get a double check of how to call the several.py script.
 
 VAR Main Solver — Default Settings Sent to Server
 ==================================================
