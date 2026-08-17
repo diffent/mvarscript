@@ -2828,31 +2828,34 @@ for forecastrow in range(startrow,ntrials+1):
       backtestForecastM2outsideOfZTol = numpy.abs(backtestForecastM2) > m2ZTol
       backtestForecastM3outsideOfZTol = numpy.abs(backtestForecastM3) > m3ZTol
 
-      print("backtestForecastM1outsideOfZTol", backtestForecastM1outsideOfZTol) 
-      print("backtestForecastM2outsideOfZTol", backtestForecastM2outsideOfZTol)
-      print("backtestForecastM3outsideOfZTol", backtestForecastM3outsideOfZTol)
+      if False:
+        print("backtestForecastM1outsideOfZTol", backtestForecastM1outsideOfZTol) 
+        print("backtestForecastM2outsideOfZTol", backtestForecastM2outsideOfZTol)
+        print("backtestForecastM3outsideOfZTol", backtestForecastM3outsideOfZTol)
 
-      print("backtestForecastM1 = ", backtestForecastM1)
-      print("backtestForecastM2 = ", backtestForecastM2)
-      print("backtestForecastM3 = ", backtestForecastM3)
+        print("backtestForecastM1 = ", backtestForecastM1)
+        print("backtestForecastM2 = ", backtestForecastM2)
+        print("backtestForecastM3 = ", backtestForecastM3)
 
-      print("backtestActual = ", backtestActual)
+        print("backtestActual = ", backtestActual)
 
       sameSignM1 = numpy.sign(backtestActual) == numpy.sign(backtestForecastM1)
       sameSignM2 = numpy.sign(backtestActual) == numpy.sign(backtestForecastM2)
       sameSignM3 = numpy.sign(backtestActual) == numpy.sign(backtestForecastM3)
 
-      print("sameSignM1" , sameSignM1)
-      print("sameSignM2" , sameSignM2)
-      print("sameSignM3" , sameSignM3)
+      if False:
+        print("sameSignM1" , sameSignM1)
+        print("sameSignM2" , sameSignM2)
+        print("sameSignM3" , sameSignM3)
  
       sameSignAndOutsideM1 = numpy.logical_and(sameSignM1, backtestForecastM1outsideOfZTol)
       sameSignAndOutsideM2 = numpy.logical_and(sameSignM2, backtestForecastM2outsideOfZTol)
       sameSignAndOutsideM3 = numpy.logical_and(sameSignM3, backtestForecastM3outsideOfZTol)
 
-      print("sameSignAndOutsideM1", sameSignAndOutsideM1)
-      print("sameSignAndOutsideM2", sameSignAndOutsideM2)
-      print("sameSignAndOutsideM3", sameSignAndOutsideM3)
+      if False:
+        print("sameSignAndOutsideM1", sameSignAndOutsideM1)
+        print("sameSignAndOutsideM2", sameSignAndOutsideM2)
+        print("sameSignAndOutsideM3", sameSignAndOutsideM3)
 
       countSuccessM1 = numpy.count_nonzero(sameSignAndOutsideM1)
       countSuccessM2 = numpy.count_nonzero(sameSignAndOutsideM2)
@@ -4057,8 +4060,9 @@ jout["riskFreeRate"] = riskFreeRate
 
 jout["nvar"] = len(Bfeed) # including constant
 
-print("nonZeroCoeffsPerBacktestM1", nonZeroCoeffsPerBacktestM1)
-print("nonZeroCoeffsPerBacktestM3", nonZeroCoeffsPerBacktestM3)
+if False:
+  print("nonZeroCoeffsPerBacktestM1", nonZeroCoeffsPerBacktestM1)
+  print("nonZeroCoeffsPerBacktestM3", nonZeroCoeffsPerBacktestM3)
 
 if len(nonZeroCoeffsPerBacktestM1) > 0:
   jout["m1_50thCoeffCount"] = numpy.percentile(nonZeroCoeffsPerBacktestM1, 50)
