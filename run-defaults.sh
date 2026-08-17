@@ -70,6 +70,7 @@ run_solver() {
     allowShorting=0 \
     riskFreeRate=4.0 \
     normalize=0 \
+    pullDelay=1 \
     $SYMBOLS
 }
 
