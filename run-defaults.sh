@@ -15,9 +15,18 @@
 
 # run from this script's own directory so the 'running' / 'status' / *.csv files
 # land next to the .py
-cd "$(dirname "$0")" || exit 1
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
-PY=several.py
+# Directory where all run output (status, running, *.csv, *.pdf) is written.
+# Defaults to the script's own directory (original behavior).  Set OUTDIR to run
+# in an isolated per-parameter subdirectory (used by the parameter study).
+OUTDIR="${OUTDIR:-$SCRIPT_DIR}"
+mkdir -p "$OUTDIR" || exit 1
+cd "$OUTDIR" || exit 1
+
+# several.py is invoked by absolute path so it can run from any OUTDIR while
+# still locating its helpers (found via __file__) in the script directory.
+PY="$SCRIPT_DIR/several.py"
 
 # get free keys from polygon.io and cryptocompare.com
 # get from your environment variables or hard code here
@@ -26,7 +35,7 @@ POLYIOKEY=$POLYIOKEY
 CRYPTOCOMPAREKEY=$CRYPTOCOMPAREKEY
 
 # symbols to study (first symbol is the forecast target)
-SYMBOLS="BTC ETHM"
+SYMBOLS="SPY GLD USO"
 
 # number of backtest days for phase 1
 BACKTEST_NTRIALS=200
@@ -53,8 +62,8 @@ run_solver() {
     cryptocomparekey="$CRYPTOCOMPAREKEY" \
     ntrials="$ntrials_arg" \
     coolrate=0 \
-    windowsize=200 \
-    neighbors=20 \
+    windowsize="${WINDOWSIZE:-200}" \
+    neighbors="${NEIGHBORS:-20}" \
     knnvarcutoff=200 \
     volen=21 \
     epsilon1000=2000 \
@@ -64,13 +73,13 @@ run_solver() {
     m2ZTol="$m2_arg" \
     m3ZTol="$m3_arg" \
     model1minabs=0 \
-    shareCount=1.0 \
+    shareCount=15.0 \
     costPerTrade=10.0 \
     daysWithheld=0 \
-    allowShorting=0 \
+    allowShorting=1 \
     riskFreeRate=4.0 \
-    normalize=0 \
-    pullDelay=1 \
+    normalize=1 \
+    pullDelay=15 \
     $SYMBOLS
 }
 
