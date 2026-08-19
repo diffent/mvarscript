@@ -76,13 +76,14 @@ RUN_METHOD = "optimize"
 # capped at OPT_MAX_RUNS trials.  Optuna's TPE sampler proposes each next point
 # from a model of the runs seen so far, so it spends the budget far better than a
 # grid or a finite-difference gradient method would.
-OPT_MAX_RUNS = 10                     # number of Optuna trials (== run-defaults runs)
+OPT_MAX_RUNS = 30                     # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (40, 400)      # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (2, 60)         # (min, max) inclusive search range
 OPT_WINDOWSIZE_STEP = 10              # search windowsize on this integer grid step
 OPT_NEIGHBORS_STEP = 1                # search neighbors on this integer grid step
 OPT_SEED = 42                         # RNG seed for reproducible trial suggestions
 OPT_FAIL_PENALTY = -1e6              # sharpe3 assigned to a failed/ERROR run
+OPT_BEST_FILE = "current_best.txt"    # live "best so far" file, refreshed each trial
 
 
 @dataclass
@@ -194,6 +195,8 @@ def run_optimize() -> list[RunResult]:
     print(f"optuna TPE search: up to {OPT_MAX_RUNS} trials, maximizing sharpe3")
     print(f"  windowsize in {OPT_WINDOWSIZE_RANGE} step {OPT_WINDOWSIZE_STEP}")
     print(f"  neighbors  in {OPT_NEIGHBORS_RANGE} step {OPT_NEIGHBORS_STEP}")
+    best_file = SCRIPT_DIR / OPT_BEST_FILE
+    print(f"  best-so-far written live to {best_file}")
 
     cache: dict[tuple[int, int], RunResult] = {}
     results: list[RunResult] = []
@@ -213,16 +216,41 @@ def run_optimize() -> list[RunResult]:
             print(f"=== reusing cached run for windowsize={ws},neighbors={nb} ===")
         return numeric_sharpe3(result, OPT_FAIL_PENALTY)
 
+    def write_best(study: "optuna.Study", trial: "optuna.trial.FrozenTrial") -> None:
+        """Refresh the live best-so-far file after every completed trial.
+
+        Written atomically (temp file + os.replace) so a viewer that reads it
+        mid-update never sees a half-written file.
+        """
+        done = sum(1 for t in study.trials
+                   if t.state == optuna.trial.TrialState.COMPLETE)
+        best = study.best_trial
+        tag = f"windowsize={best.params['windowsize']},neighbors={best.params['neighbors']}"
+        text = (
+            "# current best so far (refreshed after each optuna trial)\n"
+            f"updated:        {datetime.now():%Y-%m-%d %H:%M:%S}\n"
+            f"trials done:    {done}/{OPT_MAX_RUNS}\n"
+            f"best trial #:   {best.number}\n"
+            f"windowsize:     {best.params['windowsize']}\n"
+            f"neighbors:      {best.params['neighbors']}\n"
+            f"sharpe3 (best): {best.value}\n"
+            f"run subdir:     {tag}/\n"
+        )
+        tmp = best_file.with_suffix(".tmp")
+        tmp.write_text(text)
+        os.replace(tmp, best_file)  # atomic on the same filesystem
+
     study = optuna.create_study(
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=OPT_SEED),
     )
-    study.optimize(objective, n_trials=OPT_MAX_RUNS)
+    study.optimize(objective, n_trials=OPT_MAX_RUNS, callbacks=[write_best])
 
     best = study.best_params
     print(f"\n=== optuna best: windowsize={best['windowsize']} "
           f"neighbors={best['neighbors']} sharpe3={study.best_value} "
           f"({len(study.trials)} trials, {len(results)} unique runs) ===")
+    print(f"=== best-so-far file: {best_file} ===")
     return results
 
 
