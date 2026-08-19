@@ -20,6 +20,13 @@ The parameters are passed to run-defaults.sh via the WINDOWSIZE and NEIGHBORS
 environment variables (run-defaults.sh falls back to its built-in defaults of
 200 / 20 when they are unset, so its normal standalone behavior is unchanged).
 
+Two run methods are selectable via the RUN_METHOD variable:
+  * "grid"     -- exhaustive grid search over WINDOWSIZES x NEIGHBORS.
+  * "optimize" -- Optuna (TPE Bayesian) search that maximizes sharpe3, which is
+                  far more sample-efficient for this expensive, noisy black box.
+Both methods reuse the same per-run plumbing (isolated subdir, status copy,
+Sharpe extraction) and emit the same date/time-stamped results table.
+
 This is a Python port of param-study-windowsize.sh; both are kept.
 """
 
@@ -55,6 +62,27 @@ WINDOWSIZES = centered_grid(100, 20, 3)
 # NOTE: this is a full cross product -- total runs = len(WINDOWSIZES)*len(NEIGHBORS).
 # Grow the neighbors grid carefully; each run re-pulls data from the APIs.
 NEIGHBORS = centered_grid(10, 5, 3)
+
+
+# --- run method ---------------------------------------------------------------
+# "grid":    exhaustive grid search over WINDOWSIZES x NEIGHBORS (the original).
+# "optimize": Optuna (Bayesian/TPE) search that maximizes sharpe3 over
+#            (windowsize, neighbors).  Far more sample-efficient than a grid for
+#            an expensive, noisy black box on a small evaluation budget.
+RUN_METHOD = "optimize"
+
+# --- optimizer settings (only used when RUN_METHOD == "optimize") -------------
+# Each run-defaults.sh evaluation is expensive (re-pulls data), so the search is
+# capped at OPT_MAX_RUNS trials.  Optuna's TPE sampler proposes each next point
+# from a model of the runs seen so far, so it spends the budget far better than a
+# grid or a finite-difference gradient method would.
+OPT_MAX_RUNS = 10                     # number of Optuna trials (== run-defaults runs)
+OPT_WINDOWSIZE_RANGE = (40, 400)      # (min, max) inclusive search range
+OPT_NEIGHBORS_RANGE = (2, 60)         # (min, max) inclusive search range
+OPT_WINDOWSIZE_STEP = 10              # search windowsize on this integer grid step
+OPT_NEIGHBORS_STEP = 1                # search neighbors on this integer grid step
+OPT_SEED = 42                         # RNG seed for reproducible trial suggestions
+OPT_FAIL_PENALTY = -1e6              # sharpe3 assigned to a failed/ERROR run
 
 
 @dataclass
@@ -141,12 +169,73 @@ def format_table(results: list[RunResult], timestamp: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main() -> None:
-    print("=== parameter study ===")
+def numeric_sharpe3(result: RunResult, penalty: float) -> float:
+    """sharpe3 as a float for the optimizer; failed/ERROR runs map to `penalty`."""
+    return float(result.sharpe3) if isinstance(result.sharpe3, (int, float)) else penalty
+
+
+def run_grid() -> list[RunResult]:
+    """Exhaustive grid search over WINDOWSIZES x NEIGHBORS."""
     print("windowsize values:", WINDOWSIZES)
     print("neighbors values:", NEIGHBORS)
+    return [run_one(ws, nb) for ws, nb in itertools.product(WINDOWSIZES, NEIGHBORS)]
 
-    results = [run_one(ws, nb) for ws, nb in itertools.product(WINDOWSIZES, NEIGHBORS)]
+
+def run_optimize() -> list[RunResult]:
+    """Optuna (TPE) search maximizing sharpe3; returns the unique runs performed.
+
+    Each trial proposes a (windowsize, neighbors) point, which is evaluated by a
+    real run-defaults.sh run.  Results are cached so a repeated suggestion does
+    not spend the run budget twice.
+    """
+    import optuna
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)  # quiet per-trial spam
+    print(f"optuna TPE search: up to {OPT_MAX_RUNS} trials, maximizing sharpe3")
+    print(f"  windowsize in {OPT_WINDOWSIZE_RANGE} step {OPT_WINDOWSIZE_STEP}")
+    print(f"  neighbors  in {OPT_NEIGHBORS_RANGE} step {OPT_NEIGHBORS_STEP}")
+
+    cache: dict[tuple[int, int], RunResult] = {}
+    results: list[RunResult] = []
+
+    def objective(trial: "optuna.Trial") -> float:
+        ws = trial.suggest_int("windowsize", *OPT_WINDOWSIZE_RANGE,
+                               step=OPT_WINDOWSIZE_STEP)
+        nb = trial.suggest_int("neighbors", *OPT_NEIGHBORS_RANGE,
+                               step=OPT_NEIGHBORS_STEP)
+        key = (ws, nb)
+        result = cache.get(key)
+        if result is None:
+            result = run_one(ws, nb)
+            cache[key] = result
+            results.append(result)
+        else:
+            print(f"=== reusing cached run for windowsize={ws},neighbors={nb} ===")
+        return numeric_sharpe3(result, OPT_FAIL_PENALTY)
+
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=OPT_SEED),
+    )
+    study.optimize(objective, n_trials=OPT_MAX_RUNS)
+
+    best = study.best_params
+    print(f"\n=== optuna best: windowsize={best['windowsize']} "
+          f"neighbors={best['neighbors']} sharpe3={study.best_value} "
+          f"({len(study.trials)} trials, {len(results)} unique runs) ===")
+    return results
+
+
+def main() -> None:
+    print("=== parameter study ===")
+    print(f"run method: {RUN_METHOD}")
+
+    if RUN_METHOD == "grid":
+        results = run_grid()
+    elif RUN_METHOD == "optimize":
+        results = run_optimize()
+    else:
+        raise SystemExit(f"unknown RUN_METHOD {RUN_METHOD!r}; use 'grid' or 'optimize'")
 
     print("\n=== parameter study complete ===")
     print("per-run output subdirectories:")
