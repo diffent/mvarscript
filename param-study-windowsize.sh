@@ -37,13 +37,13 @@ make_grid() {
 # --- study grids --------------------------------------------------------------
 # windowsize: centered on run-defaults.sh's default (200), step 20, 5 runs:
 #   160 180 200 220 240
-WINDOWSIZES=$(make_grid 150 20 5)
+WINDOWSIZES=$(make_grid 100 20 5)
 
 # neighbors: centered on run-defaults.sh's default (20), step 5, 3 runs:
 #   15 20 25
 # NOTE: this is a full cross product -- total runs = (#windowsizes)*(#neighbors).
 # Bump the neighbors grid up carefully; each run re-pulls data from the APIs.
-NEIGHBORSLIST=$(make_grid 30 5 3)
+NEIGHBORSLIST=$(make_grid 10 5 3)
 
 echo "=== parameter study ==="
 echo "windowsize values:$WINDOWSIZES"
@@ -116,11 +116,22 @@ ls -d windowsize=*,neighbors=* 2>/dev/null
 echo "top-level status copies:"
 ls -1 status.windowsize=*,neighbors=* 2>/dev/null
 
-# summary table: windowsize, neighbors vs sharpe1/sharpe2/sharpe3
+# summary table: windowsize, neighbors vs sharpe1/sharpe2/sharpe3.
+# write it to a date/time-stamped text file, then dump that file to the console
+# so each study run leaves its own results table on disk.
+TABLE_TS=$(date +%Y%m%d-%H%M%S)
+TABLE_FILE="$SCRIPT_DIR/results.$TABLE_TS.txt"
+
+{
+  echo "# windowsize/neighbors parameter study results  ($TABLE_TS)"
+  printf '%-12s  %-10s  %-22s  %-22s  %s\n' "windowsize" "neighbors" "sharpe1" "sharpe2" "sharpe3"
+  printf '%-12s  %-10s  %-22s  %-22s  %s\n' "----------" "---------" "-------" "-------" "-------"
+  printf '%s' "$RESULTS" | while read -r ws nb s1 s2 s3; do
+    [ -n "$ws" ] && printf '%-12s  %-10s  %-22s  %-22s  %s\n' "$ws" "$nb" "$s1" "$s2" "$s3"
+  done
+} > "$TABLE_FILE"
+
 echo
 echo "=== results: windowsize, neighbors vs sharpe1/sharpe2/sharpe3 ==="
-printf '%-12s  %-10s  %-22s  %-22s  %s\n' "windowsize" "neighbors" "sharpe1" "sharpe2" "sharpe3"
-printf '%-12s  %-10s  %-22s  %-22s  %s\n' "----------" "---------" "-------" "-------" "-------"
-printf '%s' "$RESULTS" | while read -r ws nb s1 s2 s3; do
-  [ -n "$ws" ] && printf '%-12s  %-10s  %-22s  %-22s  %s\n' "$ws" "$nb" "$s1" "$s2" "$s3"
-done
+cat "$TABLE_FILE"
+echo "=== results table written to $TABLE_FILE ==="
