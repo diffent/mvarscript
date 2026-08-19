@@ -35,7 +35,7 @@ POLYIOKEY=$POLYIOKEY
 CRYPTOCOMPAREKEY=$CRYPTOCOMPAREKEY
 
 # symbols to study (first symbol is the forecast target)
-SYMBOLS="SPY GLD USO"
+SYMBOLS="AAPL NVDA"
 
 # number of backtest days for phase 1
 BACKTEST_NTRIALS=200
@@ -56,6 +56,8 @@ run_solver() {
   touch running
 
   # shellcheck disable=SC2086  # SYMBOLS is intentionally word-split into args
+  # see options of several.py which can be found by running several.py as a python script w/o args
+  # for more details of what these args do
   python3 "$PY" \
     useopen=0 \
     polyiokey="$POLYIOKEY" \
@@ -64,7 +66,7 @@ run_solver() {
     coolrate=0 \
     windowsize="${WINDOWSIZE:-200}" \
     neighbors="${NEIGHBORS:-20}" \
-    knnvarcutoff=200 \
+    knnvarcutoff=400 \
     volen=21 \
     epsilon1000=2000 \
     exponent=2.0 \
@@ -80,6 +82,15 @@ run_solver() {
     riskFreeRate=4.0 \
     normalize=1 \
     pullDelay=15 \
+    uselogit=1 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
+    uselars=0  `# uselogit=0 && uselars=1 implies LARS regression` \
+    lassolarsbic=0 `#0 implies AIC` \
+    larsalpha=100 \
+    noboot=1 \
+    reuseMergedRaw=0 \
+    diffvol=1 \
+    dyncutoff=0 \
+    scramblesens=1 \
     $SYMBOLS
 }
 
