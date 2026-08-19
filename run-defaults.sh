@@ -35,10 +35,10 @@ POLYIOKEY=$POLYIOKEY
 CRYPTOCOMPAREKEY=$CRYPTOCOMPAREKEY
 
 # symbols to study (first symbol is the forecast target)
-SYMBOLS="GLD SPY"
+SYMBOLS="GLD USO SPY"
 
 # number of backtest days for phase 1
-BACKTEST_NTRIALS=100
+BACKTEST_NTRIALS=50
 
 # one timestamp per script run, shared by the backtest and forecast copies so a
 # matching pair is easy to correlate
@@ -82,9 +82,9 @@ run_solver() {
     riskFreeRate=4.0 \
     normalize=1 \
     pullDelay=15 \
-    uselogit=0 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
-    uselars=1  `# uselogit=0 && uselars=1 implies LARS regression` \
-    lassolarsbic=0 `#0 implies AIC` \
+    uselogit=1 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
+    uselars=0  `# uselogit=0 && uselars=1 implies LARS regression` \
+    lassolarsbic=1 `#0 implies AIC` \
     larsalpha=100 \
     noboot=1 \
     reuseMergedRaw=0 \
