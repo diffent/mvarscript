@@ -155,7 +155,7 @@ alignInPython = True # off py 2.7 server, align in python direct
 # checked inside the alignInPython block: when alignInPython is True, setting
 # this True overrides the original row-by-row python alignment with the pandas
 # version. the original code is kept (in the else) for testing/experimentation.
-alignInPandas = True
+alignInPandas = False
 
 if sys.version.startswith('2.7.3'):
   annealToUse = 'Anneal'
