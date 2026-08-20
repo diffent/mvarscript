@@ -35,7 +35,7 @@ POLYIOKEY=$POLYIOKEY
 CRYPTOCOMPAREKEY=$CRYPTOCOMPAREKEY
 
 # symbols to study (first symbol is the forecast target)
-SYMBOLS="GLD USO SPY"
+SYMBOLS="MSFT AAPL"
 
 # number of backtest days for phase 1
 BACKTEST_NTRIALS=50
@@ -66,7 +66,7 @@ run_solver() {
     coolrate=0 \
     windowsize="${WINDOWSIZE:-200}" \
     neighbors="${NEIGHBORS:-20}" \
-    knnvarcutoff=400 \
+    knnvarcutoff="${KNNVARCUTOFF:-400}" \
     volen=21 \
     epsilon1000=2000 \
     exponent=2.0 \
