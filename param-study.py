@@ -78,44 +78,64 @@ RUN_METHOD = "optimize"
 # capped at OPT_MAX_RUNS trials.  Optuna's TPE sampler proposes each next point
 # from a model of the runs seen so far, so it spends the budget far better than a
 # grid or a finite-difference gradient method would.
-OPT_MAX_RUNS = 10                      # number of Optuna trials (== run-defaults runs)
+OPT_TARGET = "sharpe1"                # top-level status-JSON key to MAXIMIZE;
+                                      # any numeric key works (e.g. sortino2)
+OPT_MAX_RUNS = 30                      # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (100, 200)     # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (5, 20)         # (min, max) inclusive search range
 OPT_KNNVARCUTOFF_RANGE = (200, 400)   # (min, max) inclusive search range; integer >= 0
-OPT_WINDOWSIZE_STEP = 20              # search windowsize on this integer grid step (must be >= 1)
-OPT_NEIGHBORS_STEP = 5                # search neighbors on this integer grid step (must be >= 1)
+OPT_WINDOWSIZE_STEP = 10              # search windowsize on this integer grid step (must be >= 1)
+OPT_NEIGHBORS_STEP = 3                # search neighbors on this integer grid step (must be >= 1)
 OPT_KNNVARCUTOFF_STEP = 10            # search knnvarcutoff on this integer grid step (must be >= 1)
 OPT_SEED = 42                         # RNG seed for reproducible trial suggestions
 OPT_FAIL_PENALTY = -1e6               # sharpe3 assigned to a failed/ERROR run
 OPT_BEST_FILE = "current_best.txt"     # live "best so far" file, refreshed each trial
 
 
+# --- results table columns ----------------------------------------------------
+# Top-level status-JSON keys to show (in order) as metric columns in the results
+# table.  Any numeric key several.py writes works; unknown keys show "ERROR".
+# The OPT_TARGET objective is always included (appended if not already listed).
+TABLE_KEYS = [
+    "sharpe1", "sharpe2", "sharpe3",
+    "sortino1", "sortino2", "sortino3",
+    "sortino1p", "sortino2p", "sortino3p",
+    "bestM1pval", "bestM2pval", "bestM3pval",
+]
+
+
 @dataclass
 class RunResult:
-    """One grid point's parameters and the three Sharpe ratios it produced.
+    """One evaluated point: its parameters, reported metrics, and the objective.
 
-    A sharpe field is a float on success, or the string "ERROR" if the run's
-    status file was missing/unreadable.
+    `metrics` maps each requested status key (TABLE_KEYS + OPT_TARGET) to its
+    value -- a float on success, or "ERROR" if that key was missing/unreadable.
     """
 
     windowsize: int
     neighbors: int
     knnvarcutoff: int
-    sharpe1: float | str
-    sharpe2: float | str
-    sharpe3: float | str
+    metrics: dict[str, float | str]   # status key -> value
+    target: float | str              # value of OPT_TARGET (the optimize objective)
 
 
-def read_sharpes(status_path: Path) -> tuple[float | str, float | str, float | str]:
-    """Extract sharpe1/2/3 from a run's status JSON with a real JSON parser.
+def read_status_values(status_path: Path, keys: list[str]) -> dict[str, float | str]:
+    """Read the given top-level keys from a run's status JSON, as floats.
 
-    Returns ("ERROR", "ERROR", "ERROR") if the file is missing or malformed.
+    Returns {key: float} per key, or {key: "ERROR"} for any key that is absent,
+    non-numeric, or when the file is missing/malformed.
     """
     try:
         data = json.loads(status_path.read_text())
-        return data["sharpe1"], data["sharpe2"], data["sharpe3"]
-    except (OSError, ValueError, KeyError):
-        return "ERROR", "ERROR", "ERROR"
+    except (OSError, ValueError):
+        data = {}
+    out: dict[str, float | str] = {}
+    for k in keys:
+        try:
+            out[k] = float(data[k])
+        except (KeyError, ValueError, TypeError):
+            out[k] = "ERROR"
+    return out
 
 
 def run_one(windowsize: int, neighbors: int, knnvarcutoff: int) -> RunResult:
@@ -165,31 +185,57 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int) -> RunResult:
         print(f"warning: no 'status' file produced in {rundir} for {tag}",
               file=sys.stderr)
 
-    s1, s2, s3 = read_sharpes(status)
-    print(f"=== {tag}  sharpe1={s1} sharpe2={s2} sharpe3={s3} ===")
-    return RunResult(windowsize, neighbors, knnvarcutoff, s1, s2, s3)
+    # read the display metrics plus the objective (dedup, preserving order)
+    keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET]))
+    metrics = read_status_values(status, keys)
+    target = metrics.get(OPT_TARGET, "ERROR")
+    print(f"=== {tag}  target({OPT_TARGET})={target} ===")
+    return RunResult(windowsize, neighbors, knnvarcutoff, metrics, target)
+
+
+def _fmt_metric(value: float | str) -> str:
+    """Compact display for a metric: 6 significant digits, or the raw string."""
+    return f"{value:.6g}" if isinstance(value, (int, float)) else str(value)
 
 
 def format_table(results: list[RunResult], timestamp: str) -> str:
-    """Render the results as a fixed-width text table (trailing newline)."""
-    row = "{:<12}  {:<10}  {:<13}  {:<22}  {:<22}  {}".format
-    header = ("windowsize", "neighbors", "knnvarcutoff", "sharpe1", "sharpe2", "sharpe3")
-    lines = [
-        f"# windowsize/neighbors/knnvarcutoff parameter study results  ({timestamp})",
-        row(*header),
-        row(*("-" * len(h) for h in header)),
-    ]
-    lines += [
-        row(r.windowsize, r.neighbors, r.knnvarcutoff,
-            str(r.sharpe1), str(r.sharpe2), str(r.sharpe3))
+    """Render the results as an auto-width text table (trailing newline).
+
+    Columns are the three parameters followed by one column per TABLE_KEYS entry
+    (plus OPT_TARGET if not already listed).  The objective column is starred.
+    """
+    # metric columns: the configured keys, with OPT_TARGET appended if missing
+    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET]))
+    headers = ["windowsize", "neighbors", "knnvarcutoff"]
+    headers += [k + ("*" if k == OPT_TARGET else "") for k in metric_keys]
+
+    rows = [
+        [str(r.windowsize), str(r.neighbors), str(r.knnvarcutoff)]
+        + [_fmt_metric(r.metrics.get(k, "ERROR")) for k in metric_keys]
         for r in results
     ]
-    return "\n".join(lines) + "\n"
+
+    # size each column to the widest cell (header or any row)
+    widths = [len(h) for h in headers]
+    for cells in rows:
+        widths = [max(w, len(c)) for w, c in zip(widths, cells)]
+
+    def line(cells: list[str]) -> str:
+        return "  ".join(c.ljust(w) for c, w in zip(cells, widths))
+
+    out = [
+        f"# windowsize/neighbors/knnvarcutoff parameter study results  ({timestamp})",
+        f"# objective (*) = {OPT_TARGET}",
+        line(headers),
+        line(["-" * w for w in widths]),
+    ]
+    out += [line(cells) for cells in rows]
+    return "\n".join(out) + "\n"
 
 
-def numeric_sharpe3(result: RunResult, penalty: float) -> float:
-    """sharpe3 as a float for the optimizer; failed/ERROR runs map to `penalty`."""
-    return float(result.sharpe3) if isinstance(result.sharpe3, (int, float)) else penalty
+def numeric_target(result: RunResult, penalty: float) -> float:
+    """The run's objective value as a float; failed/ERROR runs map to `penalty`."""
+    return float(result.target) if isinstance(result.target, (int, float)) else penalty
 
 
 def run_grid() -> list[RunResult]:
@@ -202,16 +248,16 @@ def run_grid() -> list[RunResult]:
 
 
 def run_optimize() -> list[RunResult]:
-    """Optuna (TPE) search maximizing sharpe3; returns the unique runs performed.
+    """Optuna (TPE) search maximizing OPT_TARGET; returns the unique runs performed.
 
-    Each trial proposes a (windowsize, neighbors) point, which is evaluated by a
-    real run-defaults.sh run.  Results are cached so a repeated suggestion does
-    not spend the run budget twice.
+    Each trial proposes a (windowsize, neighbors, knnvarcutoff) point, evaluated
+    by a real run-defaults.sh run.  Results are cached so a repeated suggestion
+    does not spend the run budget twice.
     """
     import optuna
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)  # quiet per-trial spam
-    print(f"optuna TPE search: up to {OPT_MAX_RUNS} trials, maximizing sharpe3")
+    print(f"optuna TPE search: up to {OPT_MAX_RUNS} trials, maximizing {OPT_TARGET}")
     print(f"  windowsize   in {OPT_WINDOWSIZE_RANGE} step {OPT_WINDOWSIZE_STEP}")
     print(f"  neighbors    in {OPT_NEIGHBORS_RANGE} step {OPT_NEIGHBORS_STEP}")
     print(f"  knnvarcutoff in {OPT_KNNVARCUTOFF_RANGE} step {OPT_KNNVARCUTOFF_STEP}")
@@ -237,7 +283,7 @@ def run_optimize() -> list[RunResult]:
         else:
             print(f"=== reusing cached run for "
                   f"windowsize={ws},neighbors={nb},knnvarcutoff={kv} ===")
-        return numeric_sharpe3(result, OPT_FAIL_PENALTY)
+        return numeric_target(result, OPT_FAIL_PENALTY)
 
     def write_best(study: "optuna.Study", trial: "optuna.trial.FrozenTrial") -> None:
         """Refresh the live best-so-far file after every completed trial.
@@ -259,7 +305,7 @@ def run_optimize() -> list[RunResult]:
             f"windowsize:     {best.params['windowsize']}\n"
             f"neighbors:      {best.params['neighbors']}\n"
             f"knnvarcutoff:   {best.params['knnvarcutoff']}\n"
-            f"sharpe3 (best): {best.value}\n"
+            f"objective:      {OPT_TARGET} = {best.value}\n"
             f"run subdir:     {tag}/\n"
         )
         tmp = best_file.with_suffix(".tmp")
@@ -275,7 +321,7 @@ def run_optimize() -> list[RunResult]:
     best = study.best_params
     print(f"\n=== optuna best: windowsize={best['windowsize']} "
           f"neighbors={best['neighbors']} knnvarcutoff={best['knnvarcutoff']} "
-          f"sharpe3={study.best_value} "
+          f"{OPT_TARGET}={study.best_value} "
           f"({len(study.trials)} trials, {len(results)} unique runs) ===")
     print(f"=== best-so-far file: {best_file} ===")
     return results
@@ -308,7 +354,8 @@ def main() -> None:
     table = format_table(results, timestamp)
     table_file.write_text(table)
 
-    print("\n=== results: windowsize, neighbors, knnvarcutoff vs sharpe1/sharpe2/sharpe3 ===")
+    print(f"\n=== results: params vs sharpe1/sharpe2/sharpe3 "
+          f"(objective: target={OPT_TARGET}) ===")
     print(table, end="")
     print(f"=== results table written to {table_file} ===")
 
