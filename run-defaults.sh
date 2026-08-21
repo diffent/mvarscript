@@ -35,10 +35,10 @@ POLYIOKEY=$POLYIOKEY
 CRYPTOCOMPAREKEY=$CRYPTOCOMPAREKEY
 
 # symbols to study (first symbol is the forecast target)
-SYMBOLS="MSFT AAPL"
+SYMBOLS="AAPL MSFT"
 
-# number of backtest days for phase 1
-BACKTEST_NTRIALS=50
+# number of backtest days for phase 1 
+BACKTEST_NTRIALS=100
 
 # one timestamp per script run, shared by the backtest and forecast copies so a
 # matching pair is easy to correlate
@@ -75,8 +75,8 @@ run_solver() {
     m2ZTol="$m2_arg" \
     m3ZTol="$m3_arg" \
     model1minabs=0 \
-    shareCount=15.0 \
-    costPerTrade=10.0 \
+    shareCount=30.0 \
+    costPerTrade=5.0 \
     daysWithheld=0 \
     allowShorting=1 \
     riskFreeRate=4.0 \
