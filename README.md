@@ -2,6 +2,13 @@ A description of this code from Cladue Code so you don't have to use tokens.
 Modifed by a human, the original code writer, for clarity and to provide additional information and suggestions.
 Claude got it though.  Wow.  This was expected , for the current state of AI.  
 
+Note:  You will need to get free API data keys from polygon.io for stocks or cryptocompare.com
+for crypto usage.  Or paid keys if you want more data.  These need to be put into your
+shell environment before running, or just hard code them in the scripts if you want:
+
+export POLYIOKEY=5BfQwhatever
+export CRYPTOCOMPAREKEY=b988whatever
+
 Theory:
 https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4137779
 
