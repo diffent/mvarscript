@@ -89,7 +89,7 @@ run_solver() {
     lassolarsbic=1 `#0 implies AIC` \
     larsalpha=100 \
     noboot=1 \
-    reuseMergedRaw=0 \
+    reuseMergedRaw="${REUSEMERGEDRAW:-0}" `# 1 => skip data pull/align, read mergedraw.csv from OUTDIR (set by the param study on 2nd+ runs)` \
     diffvol=1 \
     dyncutoff=0 \
     scramblesens=1 \
