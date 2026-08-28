@@ -34,8 +34,10 @@ PY="$SCRIPT_DIR/several.py"
 POLYIOKEY=$POLYIOKEY
 CRYPTOCOMPAREKEY=$CRYPTOCOMPAREKEY
 
-# symbols to study (first symbol is the forecast target)
-SYMBOLS="AAPL MSFT"
+# symbols to study (first symbol is the forecast target).
+# Overridable via the SYMBOLS env var (used by the symbol study driver); falls
+# back to the built-in pair so standalone behavior is unchanged.
+SYMBOLS="${SYMBOLS:-AAPL MSFT}"
 
 # number of backtest days for phase 1 
 BACKTEST_NTRIALS=100

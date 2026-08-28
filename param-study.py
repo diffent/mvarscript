@@ -43,6 +43,19 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUN_SCRIPT = SCRIPT_DIR / "run-defaults.sh"
 
+# Symbols for this study, passed straight through to run-defaults.sh via the
+# SYMBOLS env var (set by symbol-study.py).  When set, every per-run output
+# subdirectory, status copy and results table is tagged with the symbols so
+# outputs from different symbol selections stay separable; a symbols.txt is also
+# dropped into each run dir.  Empty (unset) keeps the original untagged names.
+SYMBOLS = os.environ.get("SYMBOLS", "").strip()
+SYMBOL_TAG = "symbols=" + "-".join(SYMBOLS.split()) if SYMBOLS else ""
+
+
+def _tagged(name: str) -> str:
+    """Prefix a run tag / filename fragment with SYMBOL_TAG when symbols are set."""
+    return f"{SYMBOL_TAG},{name}" if SYMBOL_TAG else name
+
 
 def centered_grid(center: int, step: int, n: int) -> list[int]:
     """n integer values centered on `center`, spaced `step` apart.
@@ -78,9 +91,9 @@ RUN_METHOD = "optimize"
 # capped at OPT_MAX_RUNS trials.  Optuna's TPE sampler proposes each next point
 # from a model of the runs seen so far, so it spends the budget far better than a
 # grid or a finite-difference gradient method would.
-OPT_TARGET = "sortino3"                # top-level status-JSON key to MAXIMIZE;
+OPT_TARGET = "sharpe3"                # top-level status-JSON key to MAXIMIZE;
                                       # any numeric key works (e.g. sortino2)
-OPT_MAX_RUNS = 30                      # number of Optuna trials (== run-defaults runs)
+OPT_MAX_RUNS = 10                      # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (100, 200)     # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (5, 20)         # (min, max) inclusive search range
 OPT_KNNVARCUTOFF_RANGE = (200, 400)   # (min, max) inclusive search range; integer >= 0
@@ -140,7 +153,7 @@ def read_status_values(status_path: Path, keys: list[str]) -> dict[str, float | 
 
 def run_one(windowsize: int, neighbors: int, knnvarcutoff: int) -> RunResult:
     """Run a single (windowsize, neighbors, knnvarcutoff) point in a clean subdir."""
-    tag = f"windowsize={windowsize},neighbors={neighbors},knnvarcutoff={knnvarcutoff}"
+    tag = _tagged(f"windowsize={windowsize},neighbors={neighbors},knnvarcutoff={knnvarcutoff}")
     print("\n" + "#" * 64)
     print(f"### {tag}  ->  subdir {tag}/")
     print("#" * 64)
@@ -149,6 +162,10 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int) -> RunResult:
     rundir = SCRIPT_DIR / tag
     shutil.rmtree(rundir, ignore_errors=True)
     rundir.mkdir(parents=True)
+
+    # record which symbols this run used, for clarity when comparing runs
+    if SYMBOLS:
+        (rundir / "symbols.txt").write_text(SYMBOLS + "\n")
 
     # the .py's monitor thread watches for this kill-switch file in its run dir;
     # create it up front (run-defaults.sh also touches it there)
@@ -339,18 +356,19 @@ def main() -> None:
         raise SystemExit(f"unknown RUN_METHOD {RUN_METHOD!r}; use 'grid' or 'optimize'")
 
     print("\n=== parameter study complete ===")
+    # the leading '*' matches the optional 'symbols=...,' prefix when set
     print("per-run output subdirectories:")
-    for d in sorted(SCRIPT_DIR.glob("windowsize=*,neighbors=*,knnvarcutoff=*")):
+    for d in sorted(SCRIPT_DIR.glob("*windowsize=*,neighbors=*,knnvarcutoff=*")):
         if d.is_dir():
             print(d.name)
     print("top-level status copies:")
-    for f in sorted(SCRIPT_DIR.glob("status.windowsize=*,neighbors=*,knnvarcutoff=*")):
+    for f in sorted(SCRIPT_DIR.glob("status.*windowsize=*,neighbors=*,knnvarcutoff=*")):
         print(f.name)
 
     # write the summary table to a date/time-stamped file, then dump it to the
     # console so each study run leaves its own results table on disk.
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    table_file = SCRIPT_DIR / f"results.{timestamp}.txt"
+    table_file = SCRIPT_DIR / _tagged(f"results.{timestamp}.txt")
     table = format_table(results, timestamp)
     table_file.write_text(table)
 
