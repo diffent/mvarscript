@@ -57,6 +57,18 @@ def _tagged(name: str) -> str:
     return f"{SYMBOL_TAG},{name}" if SYMBOL_TAG else name
 
 
+# --- merged-raw reuse ---------------------------------------------------------
+# The raw, aligned price matrix (mergedraw.csv) depends only on the symbols, not
+# on windowsize/neighbors/knnvarcutoff, so it is identical across every run in
+# one study.  Building it re-pulls & aligns data from the APIs (the slow part),
+# so we do it once: the FIRST run pulls fresh (reuseMergedRaw=0) and its
+# mergedraw.csv is cached here; every later run gets that file copied into its
+# fresh (rmtree'd) OUTDIR and runs with reuseMergedRaw=1, skipping the pull.
+# Tagged by symbols so concurrent studies on different symbols never collide.
+MERGEDRAW_CACHE = SCRIPT_DIR / _tagged("mergedraw.cache.csv")
+_first_run_done = False  # flips True after the first run_one() completes
+
+
 def centered_grid(center: int, step: int, n: int) -> list[int]:
     """n integer values centered on `center`, spaced `step` apart.
 
@@ -91,7 +103,7 @@ RUN_METHOD = "optimize"
 # capped at OPT_MAX_RUNS trials.  Optuna's TPE sampler proposes each next point
 # from a model of the runs seen so far, so it spends the budget far better than a
 # grid or a finite-difference gradient method would.
-OPT_TARGET = "sharpe3"                # top-level status-JSON key to MAXIMIZE;
+OPT_TARGET = "sortino1"                # top-level status-JSON key to MAXIMIZE;
                                       # any numeric key works (e.g. sortino2)
 OPT_MAX_RUNS = 10                      # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (100, 200)     # (min, max) inclusive search range
@@ -103,6 +115,19 @@ OPT_KNNVARCUTOFF_STEP = 10            # search knnvarcutoff on this integer grid
 OPT_SEED = 42                         # RNG seed for reproducible trial suggestions
 OPT_FAIL_PENALTY = -1e6               # sharpe3 assigned to a failed/ERROR run
 OPT_BEST_FILE = "current_best.txt"     # live "best so far" file, refreshed each trial
+
+
+def _run_tag(name: str) -> str:
+    """Prefix a run subdir / results filename with the symbols and optimize target.
+
+    Builds on _tagged (which adds the 'symbols=...' prefix when symbols are set)
+    by also recording what this study optimizes for, e.g.
+
+        symbols=NVDA-AAPL,target=sortino1,windowsize=...,neighbors=...,knnvarcutoff=...
+
+    so outputs for the same symbols but different objectives stay separable.
+    """
+    return _tagged(f"target={OPT_TARGET},{name}")
 
 
 # --- results table columns ----------------------------------------------------
@@ -153,7 +178,8 @@ def read_status_values(status_path: Path, keys: list[str]) -> dict[str, float | 
 
 def run_one(windowsize: int, neighbors: int, knnvarcutoff: int) -> RunResult:
     """Run a single (windowsize, neighbors, knnvarcutoff) point in a clean subdir."""
-    tag = _tagged(f"windowsize={windowsize},neighbors={neighbors},knnvarcutoff={knnvarcutoff}")
+    global _first_run_done
+    tag = _run_tag(f"windowsize={windowsize},neighbors={neighbors},knnvarcutoff={knnvarcutoff}")
     print("\n" + "#" * 64)
     print(f"### {tag}  ->  subdir {tag}/")
     print("#" * 64)
@@ -171,13 +197,23 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int) -> RunResult:
     # create it up front (run-defaults.sh also touches it there)
     (rundir / "running").touch()
 
+    # First run pulls fresh; later runs reuse the cached mergedraw.csv (same for
+    # all runs of this study) by copying it into this fresh OUTDIR so several.py
+    # finds it there.  If the cache is missing (e.g. the first run failed to
+    # produce it) fall back to a full pull rather than crash.
+    reuse = _first_run_done and MERGEDRAW_CACHE.is_file()
+    if reuse:
+        shutil.copy(MERGEDRAW_CACHE, rundir / "mergedraw.csv")
+
     # OUTDIR routes every output file into rundir; the *NAME* env vars set params
     env = os.environ | {
         "OUTDIR": str(rundir),
         "WINDOWSIZE": str(windowsize),
         "NEIGHBORS": str(neighbors),
         "KNNVARCUTOFF": str(knnvarcutoff),
+        "REUSEMERGEDRAW": "1" if reuse else "0",
     }
+    print(f"### reuseMergedRaw={'1 (cached data)' if reuse else '0 (fresh pull)'}")
     # tee the run's stdout+stderr to a per-run log in its output folder
     log_path = rundir / "run.log"
     with open(log_path, "w") as log:
@@ -191,6 +227,13 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int) -> RunResult:
     if proc.returncode != 0:
         print(f"warning: run-defaults.sh exited {proc.returncode} for {tag}",
               file=sys.stderr)
+
+    # cache the freshly-pulled/aligned mergedraw.csv from the first run so every
+    # later run can reuse it (skip the slow data pull); done only on full pulls.
+    produced_raw = rundir / "mergedraw.csv"
+    if not reuse and produced_raw.is_file():
+        shutil.copy(produced_raw, MERGEDRAW_CACHE)
+    _first_run_done = True
 
     # leave a top-level convenience copy of this run's status, tagged with both
     # parameter values (the full output set stays in the subdir)
@@ -348,6 +391,10 @@ def main() -> None:
     print("=== parameter study ===")
     print(f"run method: {RUN_METHOD}")
 
+    # drop any stale merged-raw cache so the first run of THIS study always pulls
+    # fresh data (symbols may have changed since a previous study left a cache).
+    MERGEDRAW_CACHE.unlink(missing_ok=True)
+
     if RUN_METHOD == "grid":
         results = run_grid()
     elif RUN_METHOD == "optimize":
@@ -368,7 +415,7 @@ def main() -> None:
     # write the summary table to a date/time-stamped file, then dump it to the
     # console so each study run leaves its own results table on disk.
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    table_file = SCRIPT_DIR / _tagged(f"results.{timestamp}.txt")
+    table_file = SCRIPT_DIR / _run_tag(f"results.{timestamp}.txt")
     table = format_table(results, timestamp)
     table_file.write_text(table)
 
