@@ -1,0 +1,6 @@
+#!/bin/sh
+theDate=`date`
+mkdir old.$theDate
+mv target=* old.$theDate
+mv status.* old.$theDate
+mv symbols=* old.$theDate
