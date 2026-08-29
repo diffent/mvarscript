@@ -1,5 +1,5 @@
 #!/bin/sh
-theDate=`date`
+theDate=`date | sed -e 's/ /_/g'`
 mkdir old.$theDate
 mv target=* old.$theDate
 mv status.* old.$theDate
