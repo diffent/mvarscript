@@ -40,7 +40,7 @@ CRYPTOCOMPAREKEY=$CRYPTOCOMPAREKEY
 SYMBOLS="${SYMBOLS:-AAPL MSFT}"
 
 # number of backtest days for phase 1 
-BACKTEST_NTRIALS=200
+BACKTEST_NTRIALS=100
 
 # one timestamp per script run, shared by the backtest and forecast copies so a
 # matching pair is easy to correlate
