@@ -34,7 +34,7 @@ SYMBOL_POOL = [
 
 # small test
 SYMBOL_POOL = [
-    "NVDA", "AAPL", "GOOG"
+    "NVDA", "AAPL", "GOOG", "MSFT", "AMZN"
 ]
 
 # how many symbols to use per param-study run.  Ordered permutations are

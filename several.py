@@ -187,7 +187,7 @@ ntrials = 9 # will run 1 more since starts at zero
 neighbors = 20
 coolrate = 0 # model 1 solver: 0 fast anneal (dwell=1), 1 slow anneal, 2 slow anneal (output labeled BFGS), 3 force BFGS no anneal; anneal only on legacy py2.7.3 scipy else BFGS
 noboot=1 # if 1 skip boot run nominal
-larsalpha=100
+larsalpha=100 # not used now
 knnvarcutoff=50 # percent times 10
 volen=21 # volatility length
 scramblesens=0 # use scramble method for sens check
