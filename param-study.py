@@ -155,6 +155,7 @@ class RunResult:
     knnvarcutoff: int
     metrics: dict[str, float | str]   # status key -> value
     target: float | str              # value of OPT_TARGET (the optimize objective)
+    rundir: str                      # this run's output subdirectory name (the tag)
 
 
 def read_status_values(status_path: Path, keys: list[str]) -> dict[str, float | str]:
@@ -250,7 +251,7 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int) -> RunResult:
     metrics = read_status_values(status, keys)
     target = metrics.get(OPT_TARGET, "ERROR")
     print(f"=== {tag}  target({OPT_TARGET})={target} ===")
-    return RunResult(windowsize, neighbors, knnvarcutoff, metrics, target)
+    return RunResult(windowsize, neighbors, knnvarcutoff, metrics, target, tag)
 
 
 def _fmt_metric(value: float | str) -> str:
@@ -268,10 +269,15 @@ def format_table(results: list[RunResult], timestamp: str) -> str:
     metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET]))
     headers = ["windowsize", "neighbors", "knnvarcutoff"]
     headers += [k + ("*" if k == OPT_TARGET else "") for k in metric_keys]
+    # trailing columns: symbols studied (underscore-joined for easy spreadsheet
+    # import) and the run's output subdirectory name (to locate its full output)
+    headers += ["symbols", "rundir"]
 
+    symbols_cell = "_".join(SYMBOLS.split()) if SYMBOLS else ""
     rows = [
         [str(r.windowsize), str(r.neighbors), str(r.knnvarcutoff)]
         + [_fmt_metric(r.metrics.get(k, "ERROR")) for k in metric_keys]
+        + [symbols_cell, r.rundir]
         for r in results
     ]
 
