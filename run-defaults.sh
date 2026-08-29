@@ -87,7 +87,7 @@ run_solver() {
     uselogit=1 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
     uselars=0  `# uselogit=0 && uselars=1 implies LARS regression` \
     lassolarsbic=1 `#0 implies AIC` \
-    larsalpha=100 \
+    larsalpha=100 `# not used currently` \
     noboot=1 \
     reuseMergedRaw="${REUSEMERGEDRAW:-0}" `# 1 => skip data pull/align, read mergedraw.csv from OUTDIR (set by the param study on 2nd+ runs)` \
     diffvol=1 \
