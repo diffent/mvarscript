@@ -105,7 +105,7 @@ RUN_METHOD = "optimize"
 # grid or a finite-difference gradient method would.
 OPT_TARGET = "sortino3"                # top-level status-JSON key to MAXIMIZE;
                                       # any numeric key works (e.g. sortino2)
-OPT_MAX_RUNS = 30                      # number of Optuna trials (== run-defaults runs)
+OPT_MAX_RUNS = 10                     # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (100, 200)     # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (5, 20)         # (min, max) inclusive search range
 OPT_KNNVARCUTOFF_RANGE = (200, 400)   # (min, max) inclusive search range; integer >= 0
