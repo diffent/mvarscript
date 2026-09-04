@@ -98,6 +98,12 @@ run_solver() {
 
 # --- phase 1: backtest. the 0.0 ztols we pass are ignored because backtest mode
 #     recomputes the ideal tolerances (several.py gates that on ntrials > -1). ---
+#
+# NOTE (m*ZTol tolerances): a forecast (phase 2, ntrials=-1) does NOT compute the
+# m*ZTol tolerances -- several.py only derives them in backtest mode (ntrials>-1)
+# and merely *consumes* them when ntrials=-1.  That is why this phase-1 backtest
+# always runs first, even for a pure forecast (see forecast.sh): it exists to
+# produce the ideal m1/m2/m3 ZTol values that phase 2 then forecasts with.
 echo "=== phase 1: backtest (ntrials=$BACKTEST_NTRIALS) ==="
 run_solver "$BACKTEST_NTRIALS" 0.0 0.0 0.0
 
@@ -136,9 +142,9 @@ echo "=== found tolerances: m1ZTol=$M1 m2ZTol=$M2 m3ZTol=$M3 ==="
 
 # --- phase 2: forecast (ntrials=-1) reusing everything, with the found tolerances. ---
 
-# if'd out for now 
-
-if [ 0 -eq 1 ] ; then
+# Off by default (backtest-only, original behavior).  forecast.sh sets
+# DO_FORECAST=1 to run the forward forecast using phase 1's ideal tolerances.
+if [ "${DO_FORECAST:-0}" = "1" ] ; then
   echo "=== phase 2: forecast (ntrials=-1) with found tolerances ==="
   run_solver -1 "$M1" "$M2" "$M3"
 

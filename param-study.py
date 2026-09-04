@@ -103,9 +103,9 @@ RUN_METHOD = "optimize"
 # capped at OPT_MAX_RUNS trials.  Optuna's TPE sampler proposes each next point
 # from a model of the runs seen so far, so it spends the budget far better than a
 # grid or a finite-difference gradient method would.
-OPT_TARGET = "sortino1"                # top-level status-JSON key to MAXIMIZE;
+OPT_TARGET = "sortino3"                # top-level status-JSON key to MAXIMIZE;
                                       # any numeric key works (e.g. sortino2)
-OPT_MAX_RUNS = 10                     # number of Optuna trials (== run-defaults runs)
+OPT_MAX_RUNS = 30                     # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (100, 200)     # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (5, 20)         # (min, max) inclusive search range
 OPT_KNNVARCUTOFF_RANGE = (200, 400)   # (min, max) inclusive search range; integer >= 0
