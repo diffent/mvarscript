@@ -3225,7 +3225,7 @@ for forecastrow in range(startrow,ntrials+1):
       # show cumulative instead
       
       fig = plt.figure()
-      plot(ztolGain3Plot[1])
+      plot(ztolGain1Plot[1])
       fig.savefig('gainsOverTimeM1.pdf')
 
       fig = plt.figure()
