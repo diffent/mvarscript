@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Drive param-study.py across combinations of stock symbols.
 
-Starts from SYMBOL_POOL and selects SELECT_COUNT symbols at a time in ALL
-ordered permutations (order matters -- the first symbol is the forecast target
-in run-defaults.sh, so e.g. "NVDA AAPL" and "AAPL NVDA" are two distinct runs).
+Starts from SYMBOL_POOL and selects SELECT_COUNT symbols at a time.  The first
+symbol is the forecast target in run-defaults.sh, so its position matters (e.g.
+"NVDA AAPL" and "AAPL NVDA" are two distinct runs), but the remaining symbols
+are predictors whose order is irrelevant, so selections that differ only in that
+CDR ordering (e.g. "SPY GLD USO" vs "SPY USO GLD") are collapsed to one run.
 For each selection it runs the full param-study.py optimizer with the SYMBOLS
 environment variable set to that selection.
 
@@ -48,13 +50,28 @@ SELECT_COUNT = 3
 
 
 def selections(pool: list[str], k: int) -> list[tuple[str, ...]]:
-    """All ordered selections (permutations) of k distinct symbols from pool."""
-    return list(itertools.permutations(pool, k))
+    """Selections of k distinct symbols from pool.
+
+    The first symbol is the forecast target so its position matters, but the
+    remaining symbols (the CDR) are predictors whose order is irrelevant to
+    param-study.py.  We generate ordered permutations and then weed out the
+    ones that only differ in CDR ordering, keying each on (head, CDR-as-set)
+    so e.g. (SPY, GLD, USO) and (SPY, USO, GLD) collapse to a single run.
+    """
+    out = []
+    seen = set()
+    for combo in itertools.permutations(pool, k):
+        key = (combo[0], frozenset(combo[1:]))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(combo)
+    return out
 
 
 def main() -> None:
     combos = selections(SYMBOL_POOL, SELECT_COUNT)
-    print(f"=== symbol study: {len(combos)} ordered selections of "
+    print(f"=== symbol study: {len(combos)} selections of "
           f"{SELECT_COUNT} from {len(SYMBOL_POOL)} symbols ===")
 
     failures = 0
