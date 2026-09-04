@@ -37,9 +37,14 @@ SYMBOL_POOL = [
     "NVDA", "AAPL", "GOOG", "MSFT", "AMZN"
 ]
 
+# small test
+#SYMBOL_POOL = [
+#    "GLD", "SPY", "SLV", "USO"
+#]
+
 # how many symbols to use per param-study run.  Ordered permutations are
 # generated, so this is 2 for pairs, 3 for triples, etc.
-SELECT_COUNT = 2
+SELECT_COUNT = 3
 
 
 def selections(pool: list[str], k: int) -> list[tuple[str, ...]]:
