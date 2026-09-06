@@ -1188,6 +1188,13 @@ print("number of columnso = ", len(firstrowo))
 ncolsrt = len(firstrow)
 ncolsrto = len(firstrowo)
 
+# names aligned to the model 1 coefficient vector: index 0 is the fitted
+# constant, then the regression feature columns 3..ncolsrt-1 (cols 0,1,2 are
+# date, target close-minus-open, and target close, which are not features).
+# headerline was built alongside the regression table so it is column-aligned.
+regFeatureNames = ["const"] + headerline[3:ncolsrt]
+print("regFeatureNames = ", regFeatureNames)
+
 #sys.exit(0)
 
 # ah hah, regtable gets recomputed here without header and differenced
@@ -2539,7 +2546,10 @@ for forecastrow in range(startrow,ntrials+1):
     #keptVars = [vi for vi in range(0, len(varMask)) if varMask[vi] != 0]
     #print("model 1 remaining variables after elimination (0=const):", keptVars,
     #      "(", len(keptVars), "of", len(varMask), "kept )")
-    print("model 1 masked coefficients after refit:", theresult.x)
+    print("model 1 masked coefficients after refit:")
+    for cname, cval in zip(regFeatureNames, theresult.x):
+      cval = float(cval)
+      print("  ", cname, 0 if cval == 0 else cval)
 
     # end first trial easy way of var sensitivity
  
