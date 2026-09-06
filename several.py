@@ -2534,6 +2534,13 @@ for forecastrow in range(startrow,ntrials+1):
 
     theresult.x = theresultXMasked
 
+    # log the surviving model 1 coefficients after low-contributor elimination
+    # (eliminated variables show as exact zeros; index 0 is the constant)
+    #keptVars = [vi for vi in range(0, len(varMask)) if varMask[vi] != 0]
+    #print("model 1 remaining variables after elimination (0=const):", keptVars,
+    #      "(", len(keptVars), "of", len(varMask), "kept )")
+    print("model 1 masked coefficients after refit:", theresult.x)
+
     # end first trial easy way of var sensitivity
  
   if (forecastrow >= 0):
