@@ -84,8 +84,8 @@ run_solver() {
     riskFreeRate=4.0 \
     normalize=1 \
     pullDelay=15 \
-    uselogit=1 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
-    uselars=0  `# uselogit=0 && uselars=1 implies LARS regression` \
+    uselogit=0 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
+    uselars=1  `# uselogit=0 && uselars=1 implies LARS regression` \
     lassolarsbic=1 `#0 implies AIC` \
     larsalpha=100 `# not used currently` \
     noboot=1 \
