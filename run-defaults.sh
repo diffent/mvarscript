@@ -76,7 +76,8 @@ run_solver() {
     m1ZTol="$m1_arg" \
     m2ZTol="$m2_arg" \
     m3ZTol="$m3_arg" \
-    model1minabs=0 \
+    model1minabs=0 `# 1 => model 1 minimizes sum of abs residuals (BFGS can solve this); 0 => directional sign-count objective, which needs simulated annealing and is a no-op under modern scipy/BFGS` \
+    useAnneal=1 \
     shareCount=30.0 \
     costPerTrade=5.0 \
     daysWithheld=0 \

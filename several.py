@@ -214,6 +214,21 @@ m3ZTol=0
 
 model1minabs=0
 
+# model 1 optimizer: 0 => scipy BFGS (fast, but cannot descend the directional
+# theobj step objective when model1minabs=0, since its finite-difference gradient
+# is ~0); 1 => scipy.optimize.dual_annealing, a real simulated annealing global
+# optimizer that can move the step objective.
+useAnneal=0
+
+# dual_annealing early stop (only when useAnneal=1): halt a solve after this many
+# consecutive improved-minima callbacks fail to beat the best-so-far by >1e-6.
+# maxiter stays as the safety ceiling.  0 disables the stall stop.
+annealStall=20
+
+# dual_annealing maxiter (only when useAnneal=1): max global annealing iterations
+# per model 1 solve.
+annealMaxiter=200
+
 diffvol=1 # 0 do not daily difference the volatility, 1 daily difference the volatility
 
 normalize=0
@@ -298,6 +313,9 @@ if nargs < 2:
   print("option:  m2ZTol=0 model 2 forecast Z tolerance, used for forecasting default (computed during backtest)")
   print("option:  m3ZTol=0 model 3 forecast Z tolerance, used for forecasting default (computed during backtest)")
   print("option:  model1minabs=0 if 1 use min abs residual solve for model 1")
+  print("option:  useAnneal=0 model 1 optimizer: 0=BFGS, 1=dual_annealing (real simulated annealing; can descend the directional step objective that BFGS cannot)")
+  print("option:  annealStall=20 dual_annealing early stop (useAnneal=1 only): halt a solve after this many stalled improved-minima callbacks; 0 disables (maxiter only)")
+  print("option:  annealMaxiter=200 dual_annealing max global iterations per model 1 solve (useAnneal=1 only)")
   print("option:  diffvol=1 if 1 daily difference the volatility, if 0 do not daily difference the volatility")
 
   print("note:  create an empty file named 'running' in the run directory before starting; delete it to stop the run (remote kill switch, no process-kill permission needed)")
@@ -372,6 +390,9 @@ print("windowsize   = ", windowsize)
 print("ntrials      = ", ntrials)
 print("neighbors    = ", neighbors)
 print("coolrate     = ", coolrate)
+print("useAnneal    = ", useAnneal)
+print("annealStall  = ", annealStall)
+print("annealMaxiter= ", annealMaxiter)
 print("epsilon      = ", epsilon)
 print("noboot       = ", noboot)
 
@@ -1510,6 +1531,49 @@ def forecast1(A, i):
 
 global objcount
 
+
+def makeStallCallback(patience):
+  """Build a dual_annealing callback that early-stops on a stall.
+
+  dual_annealing calls the callback for every minimum it finds.  We track the
+  best objective seen so far and count consecutive callbacks that fail to beat
+  it by a meaningful margin (1e-6); after `patience` such stalled reports we
+  return True, which tells dual_annealing to stop.  patience <= 0 disables
+  early stopping (returns None, so maxiter alone governs the run)."""
+  if patience <= 0:
+    return None
+  state = {'best': None, 'stall': 0}
+  def cb(x, f, context):
+    if state['best'] is None or f < state['best'] - 1e-6:
+      state['best'] = f
+      state['stall'] = 0
+    else:
+      state['stall'] += 1
+      if state['stall'] >= patience:
+        return True
+    return False
+  return cb
+
+
+def logSolveResult(tag, res):
+  """Log a model 1 solve result (works for BFGS and dual_annealing).
+
+  The objective is -ncorrect when model1minabs==0 (so achieved ncorrect is
+  -res.fun) and the sum of absolute residuals when model1minabs==1."""
+  fun = getattr(res, 'fun', None)
+  if fun is None:
+    metric = "objective = -"
+  elif model1minabs == 0:
+    metric = "ncorrect = " + str(int(round(-float(fun)))) + " / " + str(windowsize)
+  else:
+    metric = "absresid = " + str(float(fun))
+  print("model 1", tag, metric,
+        " success:", getattr(res, 'success', '-'),
+        " msg:", getattr(res, 'message', '-'),
+        " iters:", getattr(res, 'nit', '-'),
+        " evals:", getattr(res, 'nfev', '-'))
+
+
 # PRODUCTION MIN ABS DIFF
 
 def theobjAbs(A):
@@ -1605,7 +1669,8 @@ def theobjPreMask(varMask, A):
   #return 1  # for speed
   #print "start of obj function"
 
-  print("varMask =", varMask)
+  # critical for debugging
+  #print("varMask =", varMask)
 
   global objcount
 
@@ -1665,7 +1730,7 @@ def theobjPreMask(varMask, A):
   #    # penalize out of bounds
   #    ncorrect = ncorrect - int(abs(q))
 
-  if True or debug:
+  if debug:
     print("theobj ncorrect = ", ncorrect) #, "\r",
 
   return -ncorrect
@@ -1804,14 +1869,26 @@ for forecastrow in range(startrow,ntrials+1):
   print("proper random seed")
   numpy.random.seed(100)
 
-  if model1minabs == 1:
-    theresult = scipy.optimize.minimize(theobjAbs, B, method='BFGS', options=d)
+  if not useAnneal:
+    if model1minabs == 1:
+      theresult = scipy.optimize.minimize(theobjAbs, B, method='BFGS', options=d)
+    else:
+      optMethod = annealToUse
+      if coolrate == 3:
+        optMethod = 'BFGS'
+      theresult = scipy.optimize.minimize(theobj, B, method=optMethod, options=d) # Anneal
   else:
-    optMethod = annealToUse
-    if coolrate == 3:
-      optMethod = 'BFGS'
-    theresult = scipy.optimize.minimize(theobj, B, method=optMethod, options=d) # Anneal
- 
+    # actual simulated annealing (dual_annealing) instead of BFGS. Useful for the
+    # directional theobj step objective, whose ~zero finite-difference gradient
+    # makes BFGS terminate at the all-ones start; annealing can move it.
+    saBounds = [(d['lower'], d['upper'])] * len(B)
+    saObj = theobjAbs if model1minabs == 1 else theobj
+    theresult = scipy.optimize.dual_annealing(saObj, saBounds, x0=B, seed=100,
+                                              maxiter=annealMaxiter,
+                                              callback=makeStallCallback(annealStall))
+
+  logSolveResult("initial solve", theresult)
+
   # remove for machine 1 theresult = scipy.optimize.OptimizeResult()
   # theresult.x = copy.deepcopy(B)
 
@@ -2529,13 +2606,24 @@ for forecastrow in range(startrow,ntrials+1):
 
     # only coded for min abs to start
 
-    if model1minabs == 1:
-      theresult = scipy.optimize.minimize(boundTheObjAbs, B, method='BFGS', options=d)
+    if not useAnneal:
+      if model1minabs == 1:
+        theresult = scipy.optimize.minimize(boundTheObjAbs, B, method='BFGS', options=d)
+      else:
+        optMethod = annealToUse
+        if coolrate == 3:
+          optMethod = 'BFGS'
+        theresult = scipy.optimize.minimize(boundTheObj, B, method=optMethod, options=d) # BFGS
     else:
-      optMethod = annealToUse
-      if coolrate == 3:
-        optMethod = 'BFGS'
-      theresult = scipy.optimize.minimize(boundTheObj, B, method=optMethod, options=d) # BFGS
+      # actual simulated annealing (dual_annealing) on the masked objective,
+      # instead of BFGS (see the initial-solve site above for rationale).
+      saBounds = [(d['lower'], d['upper'])] * len(B)
+      saObj = boundTheObjAbs if model1minabs == 1 else boundTheObj
+      theresult = scipy.optimize.dual_annealing(saObj, saBounds, x0=B, seed=100,
+                                                maxiter=annealMaxiter,
+                                                callback=makeStallCallback(annealStall))
+
+    logSolveResult("masked re-solve", theresult)
 
     theresultXMasked = numpy.multiply(theresult.x, varMask)
 
