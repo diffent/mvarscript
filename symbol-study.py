@@ -40,6 +40,11 @@ SYMBOL_POOL = [
 ]
 
 # small test
+SYMBOL_POOL = [
+    "MSFT", "NVDA", "AAPL"
+]
+
+# small test
 #SYMBOL_POOL = [
 #    "GLD", "SPY", "SLV", "USO"
 #]
