@@ -84,7 +84,7 @@ run_solver() {
     allowShorting=1 \
     riskFreeRate=4.0 \
     normalize=1 \
-    pullDelay=15 \
+    pullDelay=1 \
     uselogit=0 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
     uselars=1  `# uselogit=0 && uselars=1 implies LARS regression` \
     lassolarsbic=0 `#0 implies AIC` \
