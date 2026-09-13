@@ -193,6 +193,19 @@ volen=21 # volatility length
 scramblesens=0 # use scramble method for sens check
 dyncutoff=0 # 1 dynamic cutoff experiment 0 = fixed cutoff
 lassolarsbic=0 # use aic old default
+# model 3 linear regressor selection (used on the uselars / LARS path).  The
+# value is the sklearn class name to instantiate.  Supported today:
+#   "LassoLarsIC"  -- information-criterion Lasso (long-time default; tends to
+#                     over-prune under low signal-to-noise)
+#   "ElasticNetCV" -- L1+L2 with cross-validated alpha; keeps more weak
+#                     predictors, better for low signal-to-noise
+# Add more string cases in the model 3 build section as needed.
+#
+# ElasticNetCV fit-vs-weed dial: we reuse the existing knnvarcutoff (percent*10)
+# rather than a separate knob -- knnvarcutoff/1000 gives an l1_ratio in [0,1],
+# where higher = more Lasso/weeding, lower = more Ridge/keep-all.  alpha (overall
+# strength) is chosen by cross-validation.
+sublinearType = "LassoLarsIC"
 shareCount=1.0
 costPerTrade=10.0 # dollars
 allowShorting=1
@@ -308,6 +321,7 @@ if nargs < 2:
   print("option:  reuseMergedRaw=0 if 1 re-use data pulled from prior run of this file, symbol list must be same as prior run if 1")
   print("option:  pullDelay=15 (integer) seconds between data pulls to avoid rate limits on polgyon.io free plan, set to 0 for as fast as possible")
   print("option:  lassolarsbic=0 if 0 use AIC (old default), if 1 use BIC for LassoLars information criterion")
+  print("option:  sublinearType=LassoLarsIC model 3 linear regressor class name; also supports ElasticNetCV (L1+L2, CV-tuned alpha, keeps more weak predictors for low signal-to-noise). ElasticNetCV l1_ratio (fit-vs-weed) = knnvarcutoff/1000")
   print("option:  riskFreeRate=4.0 annual risk free rate in percent used in Sharpe / return calcs")
   print("option:  m1ZTol=0 model 1 forecast Z tolerance, used for forecasting default (computed during backtest)")
   print("option:  m2ZTol=0 model 2 forecast Z tolerance, used for forecasting default (computed during backtest)")
@@ -351,7 +365,7 @@ for arg in theargs:
        print("removing ", origargs[0], " from origargs")
        origargs.pop(0)
 
-       if keyval[0] == 'polyiokey' or keyval[0] == 'cryptocomparekey':
+       if keyval[0] == 'polyiokey' or keyval[0] == 'cryptocomparekey' or keyval[0] == 'sublinearType':
          locals()[keyval[0]] = keyval[1]
        else:
          #locals()[keyval[0]] = int(keyval[1])
@@ -385,6 +399,7 @@ print("after arg processing:")
 print("uselogit     = ", uselogit)
 print("uselars      = ", uselars)
 print("lassolarsbic = ", lassolarsbic)
+print("sublinearType= ", sublinearType)
 print("useopen      = ", useopen)
 print("windowsize   = ", windowsize)
 print("ntrials      = ", ntrials)
@@ -2104,7 +2119,18 @@ for forecastrow in range(startrow,ntrials+1):
   if lassolarsbic == 1:
     theCriterion = 'bic'
 
-  clfLars = linear_model.LassoLarsIC(verbose=True, fit_intercept=True, criterion=theCriterion)
+  if sublinearType == "ElasticNetCV":
+    # L1+L2 elastic net; cross-validation picks alpha (overall strength).
+    # fit-vs-weed dial reuses knnvarcutoff (percent*10): l1_ratio = knnvarcutoff/1000,
+    # clamped to (0,1] since l1_ratio=0 is pure Ridge (discouraged by sklearn).
+    # higher knnvarcutoff => more Lasso/weeding, lower => more Ridge/keep-all.
+    elasticL1Ratio = min(max(knnvarcutoff / 1000.0, 0.01), 1.0)
+    print("ElasticNetCV l1_ratio (from knnvarcutoff):", elasticL1Ratio)
+    clfLars = linear_model.ElasticNetCV(l1_ratio=elasticL1Ratio, cv=5,
+                                        fit_intercept=True, max_iter=100000)
+  else:
+    # default: LassoLarsIC (information-criterion Lasso)
+    clfLars = linear_model.LassoLarsIC(verbose=True, fit_intercept=True, criterion=theCriterion)
 
   #clf = linear_model.Perceptron(n_iter=10) 
   #clfLars = linear_model.LarsCV(verbose=True,cv=20) does not run w/ cv arg or not
