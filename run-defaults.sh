@@ -87,7 +87,8 @@ run_solver() {
     pullDelay=1 \
     uselogit=0 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
     uselars=1  `# uselogit=0 && uselars=1 implies LARS regression` \
-    lassolarsbic=0 `#0 implies AIC` \
+    sublinearType="ElasticNetCV" `# model 3 linear regressor: ElasticNetCV (L1+L2, CV alpha) or LassoLarsIC. ElasticNetCV l1_ratio (fit-vs-weed) = knnvarcutoff/1000` \
+    lassolarsbic=0 `#0 implies AIC (only used by LassoLarsIC; ignored by ElasticNetCV)` \
     larsalpha=100 `# not used currently` \
     noboot=1 \
     reuseMergedRaw="${REUSEMERGEDRAW:-0}" `# 1 => skip data pull/align, read mergedraw.csv from OUTDIR (set by the param study on 2nd+ runs)` \
