@@ -87,6 +87,10 @@ RANDOM_SELECTIONS = True
 # limit (ordered mode then enumerates the entire deduped space).
 MAX_SELECTIONS = 10
 
+# Seed for the random selection RNG so a given pool + settings reproduces the
+# same draws across runs.  Set to None for a fresh (non-reproducible) draw.
+RANDOM_SEED = 42
+
 
 def selections(pool: list[str], k: int) -> list[tuple[str, ...]]:
     """Selections of k distinct symbols from pool.
@@ -133,6 +137,9 @@ def random_selections(pool: list[str], k: int, count: int) -> list[tuple[str, ..
 
 def main() -> None:
     if RANDOM_SELECTIONS:
+        # seed before drawing so the selection set is reproducible (RANDOM_SEED
+        # = None leaves the RNG unseeded for a fresh draw each run)
+        random.seed(RANDOM_SEED)
         combos = random_selections(SYMBOL_POOL, SELECT_COUNT, MAX_SELECTIONS)
         mode = "random"
     else:
