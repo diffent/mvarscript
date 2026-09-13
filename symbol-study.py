@@ -16,10 +16,18 @@ run dir -- so outputs from different selections stay separable.
 
 Change SELECT_COUNT to take three (or more) symbols at a time; everything else
 generalizes automatically.
+
+Two knobs control which selections are run:
+  RANDOM_SELECTIONS -- if True, draw MAX_SELECTIONS unique selections at random
+    from the pool; if False, enumerate them in order (deduped by CDR-as-set).
+  MAX_SELECTIONS    -- cap on how many selections to run (0 = no limit; ordered
+    mode then enumerates everything).  The full ordered space can be huge for a
+    large pool, so random mode + a cap keeps runs bounded.
 """
 
 import itertools
 import os
+import random
 import subprocess
 import sys
 from pathlib import Path
@@ -49,9 +57,35 @@ SYMBOL_POOL = [
 #    "GLD", "SPY", "SLV", "USO"
 #]
 
+# Override with (approximately) the top 50 US stocks by market cap.  This is a
+# best-effort snapshot as of early 2026 -- membership and ordering drift over
+# time, so refresh as needed.  Being last, this assignment wins over the small
+# test pools above (which are left in place for easy fallback).
+SYMBOL_POOL = [
+    "NVDA", "AAPL", "MSFT", "GOOGL", "AMZN",
+    "META", "AVGO", "TSLA", "JPM", "LLY",
+    "WMT", "V", "ORCL", "MA", "XOM",
+    "COST", "JNJ", "HD", "PG", "NFLX",
+    "BAC", "ABBV", "CRM", "CVX", "KO",
+    "AMD", "TMUS", "WFC", "PM", "CSCO",
+    "IBM", "GE", "UNH", "LIN", "MCD",
+    "ABT", "AXP", "MRK", "PEP", "INTU",
+    "NOW", "DIS", "GS", "QCOM", "TXN",
+    "CAT", "ISRG", "BKNG", "T", "ADBE",
+]
+
 # how many symbols to use per param-study run.  Ordered permutations are
 # generated, so this is 2 for pairs, 3 for triples, etc.
-SELECT_COUNT = 3
+SELECT_COUNT = 2
+
+# Selection mode.  If True, draw MAX_SELECTIONS unique selections at random from
+# the pool; if False, enumerate them in order (deduped by CDR-as-set).
+RANDOM_SELECTIONS = True
+
+# Cap on how many selections to run.  In random mode this many unique selections
+# are drawn; in ordered mode the first this-many are taken.  Set to 0 for no
+# limit (ordered mode then enumerates the entire deduped space).
+MAX_SELECTIONS = 10
 
 
 def selections(pool: list[str], k: int) -> list[tuple[str, ...]]:
@@ -74,9 +108,39 @@ def selections(pool: list[str], k: int) -> list[tuple[str, ...]]:
     return out
 
 
+def random_selections(pool: list[str], k: int, count: int) -> list[tuple[str, ...]]:
+    """Draw up to `count` unique selections of k symbols at random from pool.
+
+    Uses the same (head, CDR-as-set) dedup key as selections(), so two draws
+    that differ only in predictor ordering count as one.  If `count` exceeds the
+    number of unique selections available, we stop once we can no longer find a
+    new one (bounded by an attempt cap so we never spin forever).
+    """
+    out = []
+    seen = set()
+    max_attempts = count * 100 + 1000
+    attempts = 0
+    while len(out) < count and attempts < max_attempts:
+        attempts += 1
+        combo = tuple(random.sample(pool, k))
+        key = (combo[0], frozenset(combo[1:]))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(combo)
+    return out
+
+
 def main() -> None:
-    combos = selections(SYMBOL_POOL, SELECT_COUNT)
-    print(f"=== symbol study: {len(combos)} selections of "
+    if RANDOM_SELECTIONS:
+        combos = random_selections(SYMBOL_POOL, SELECT_COUNT, MAX_SELECTIONS)
+        mode = "random"
+    else:
+        combos = selections(SYMBOL_POOL, SELECT_COUNT)
+        if MAX_SELECTIONS > 0:
+            combos = combos[:MAX_SELECTIONS]
+        mode = "ordered"
+    print(f"=== symbol study ({mode}): {len(combos)} selections of "
           f"{SELECT_COUNT} from {len(SYMBOL_POOL)} symbols ===")
 
     failures = 0
