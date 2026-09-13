@@ -91,6 +91,24 @@ MAX_SELECTIONS = 10
 # same draws across runs.  Set to None for a fresh (non-reproducible) draw.
 RANDOM_SEED = 42
 
+# Explicit selections mode.  If this list is non-empty it takes precedence over
+# the random/ordered generation above: each inner list is run verbatim (first
+# symbol = forecast target), in the order given.  Entries may have any length
+# and need not match SELECT_COUNT.  Leave empty ([]) to use RANDOM_SELECTIONS.
+# Ordered best-first by suspected lead-lag strength (target first, leader second).
+EXPLICIT_SELECTIONS = [
+    ["AMD", "NVDA"],
+    ["AVGO", "NVDA"],
+    ["BAC", "JPM"],
+    ["T", "TMUS"],
+    ["QCOM", "AAPL"],
+    ["CRM", "MSFT"],
+    ["DIS", "NFLX"],
+    ["CVX", "XOM"],
+    ["MRK", "LLY"],
+    ["COST", "WMT"],
+]
+
 
 def selections(pool: list[str], k: int) -> list[tuple[str, ...]]:
     """Selections of k distinct symbols from pool.
@@ -136,7 +154,11 @@ def random_selections(pool: list[str], k: int, count: int) -> list[tuple[str, ..
 
 
 def main() -> None:
-    if RANDOM_SELECTIONS:
+    if EXPLICIT_SELECTIONS:
+        # run the given lists verbatim, in order (first symbol = forecast target)
+        combos = [tuple(sel) for sel in EXPLICIT_SELECTIONS]
+        mode = "explicit"
+    elif RANDOM_SELECTIONS:
         # seed before drawing so the selection set is reproducible (RANDOM_SEED
         # = None leaves the RNG unseeded for a fresh draw each run)
         random.seed(RANDOM_SEED)
@@ -147,8 +169,7 @@ def main() -> None:
         if MAX_SELECTIONS > 0:
             combos = combos[:MAX_SELECTIONS]
         mode = "ordered"
-    print(f"=== symbol study ({mode}): {len(combos)} selections of "
-          f"{SELECT_COUNT} from {len(SYMBOL_POOL)} symbols ===")
+    print(f"=== symbol study ({mode}): {len(combos)} selections ===")
 
     failures = 0
     for i, combo in enumerate(combos, 1):
