@@ -4217,15 +4217,21 @@ try:
   jout["sharpe1"] = sharpe1
   jout["sortino1"] = sortino1
   jout["sortino1p"] = sortino1p
+  # total raw return over the whole backtest ((final-initial)/initial of the
+  # equity curve), with no risk-free adjustment.  This is the per-day mean that
+  # feeds the sharpe/sortino numerator BEFORE it is divided by (ntrials+1).
+  jout["rawReturn1"] = percentDiff1
 
   jout["sharpe2"] = sharpe2
   jout["sortino2"] = sortino2
   jout["sortino2p"] = sortino2p
+  jout["rawReturn2"] = percentDiff2
 
   jout["sharpe3"] = sharpe3
   jout["sortino3"] = sortino3
   jout["sortino3p"] = sortino3p
-except Exception as e: # for forward forecast we dont have above ratios 
+  jout["rawReturn3"] = percentDiff3
+except Exception as e: # for forward forecast we dont have above ratios
   print("no ratios for forecast")
   
 jout["alldone"] = "1"

@@ -97,6 +97,7 @@ RANDOM_SEED = 42
 # and need not match SELECT_COUNT.  Leave empty ([]) to use RANDOM_SELECTIONS.
 # Ordered best-first by suspected lead-lag strength (target first, leader second).
 EXPLICIT_SELECTIONS = [
+    ["COST", "WMT"],
     ["AMD", "NVDA"],
     ["AVGO", "NVDA"],
     ["BAC", "JPM"],
@@ -105,8 +106,7 @@ EXPLICIT_SELECTIONS = [
     ["CRM", "MSFT"],
     ["DIS", "NFLX"],
     ["CVX", "XOM"],
-    ["MRK", "LLY"],
-    ["COST", "WMT"],
+    ["MRK", "LLY"]
 ]
 
 
