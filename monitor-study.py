@@ -101,7 +101,14 @@ def scan_once(args: argparse.Namespace, found: dict) -> None:
                 continue
             if sortino >= args.sortino_min and pval <= args.pval_max:
                 interesting_now += 1
-                found[(path, n)] = (sortino, pval, params_from_name(path))
+                # rawReturn<n> = total backtest return for this model (may be
+                # absent in older status files written before it was added)
+                raw = d.get(f"rawReturn{n}")
+                try:
+                    raw = float(raw)
+                except (TypeError, ValueError):
+                    raw = None
+                found[(path, n)] = (sortino, pval, raw, params_from_name(path))
 
     stamp = datetime.now().strftime("%H:%M:%S")
     print(f"[{stamp}] scanned {len(files)} files | "
@@ -111,9 +118,11 @@ def scan_once(args: argparse.Namespace, found: dict) -> None:
     # dump everything found so far, most interesting first (highest sortino,
     # then lowest p-value)
     ranked = sorted(found.items(), key=lambda kv: (-kv[1][0], kv[1][1]))
-    for rank, ((_path, n), (sortino, pval, params)) in enumerate(ranked, 1):
+    for rank, ((_path, n), (sortino, pval, raw, params)) in enumerate(ranked, 1):
+        raw_str = "     n/a" if raw is None else f"{raw:+.4f}"
         print(f"    {rank:>3}. model {n}: sortino{n}={sortino:.4f}  "
-              f"bestM{n}pval={pval:.4f}  |  {params}", flush=True)
+              f"bestM{n}pval={pval:.4f}  rawReturn{n}={raw_str}  |  {params}",
+              flush=True)
 
 
 def main() -> None:
