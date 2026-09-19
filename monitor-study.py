@@ -47,6 +47,7 @@ STATUS_GLOB = "status.symbols=*"   # only the param-tagged status copies
 # each param-study run makes its own subdir up front; a new one appearing marks
 # the start of the next run, so the gap between appearances is a run's duration.
 RUN_SUBDIR_GLOB = "*windowsize=*,neighbors=*,knnvarcutoff=*"
+OUTFILE = "interesting.txt"   # ranked hits are (over)written here each cycle
 MODELS = (1, 2, 3)
 
 
@@ -62,6 +63,9 @@ def parse_args() -> argparse.Namespace:
                    help=f"maximum p-value to flag (default: {PVAL_MAX})")
     p.add_argument("--interval", type=float, default=POLL_SECONDS,
                    help=f"seconds between scans (default: {POLL_SECONDS})")
+    p.add_argument("--outfile", default=OUTFILE,
+                   help=f"file (in --dir) overwritten each cycle with the current "
+                        f"ranked hits (default: {OUTFILE!r})")
     return p.parse_args()
 
 
@@ -169,11 +173,25 @@ def scan_once(args: argparse.Namespace, found: dict, timing: dict) -> None:
     # dump everything found so far, most interesting first (highest sortino,
     # then lowest p-value)
     ranked = sorted(found.items(), key=lambda kv: (-kv[1][0], kv[1][1]))
+    lines = []
     for rank, ((_path, n), (sortino, pval, raw, params)) in enumerate(ranked, 1):
         raw_str = "     n/a" if raw is None else f"{raw:+.4f}"
-        print(f"    {rank:>3}. model {n}: sortino{n}={sortino:.4f}  "
-              f"bestM{n}pval={pval:.4f}  rawReturn{n}={raw_str}  |  {params}",
-              flush=True)
+        lines.append(f"    {rank:>3}. model {n}: sortino{n}={sortino:.4f}  "
+                     f"bestM{n}pval={pval:.4f}  rawReturn{n}={raw_str}  |  {params}")
+    for line in lines:
+        print(line, flush=True)
+
+    # overwrite the outfile each cycle with the current ranked list (a snapshot,
+    # not a running log), so there is always an up-to-date file to inspect
+    header = (f"# study monitor -- interesting hits as of {stamp} "
+              f"(sortino>={args.sortino_min}, pval<={args.pval_max})\n"
+              f"# {len(found)} found so far\n")
+    try:
+        with open(os.path.join(args.dir, args.outfile), "w") as fh:
+            fh.write(header)
+            fh.write("\n".join(lines) + ("\n" if lines else ""))
+    except OSError as e:
+        print(f"    warning: could not write {args.outfile}: {e}", flush=True)
 
 
 def main() -> None:
