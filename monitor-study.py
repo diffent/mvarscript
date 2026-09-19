@@ -76,8 +76,9 @@ def report_subdir_timing(args: argparse.Namespace, timing: dict) -> None:
 
     A new subdir means the next run just started, so the gap since the previous
     new subdir is the duration of the run that just finished.  We print that time
-    for the subdir that just completed.  `timing` persists across scans: 'known'
-    (subdirs seen) and 'last' (name, time of the most recent new subdir).
+    for the subdir that just completed, plus the running average of all such gaps
+    seen so far.  `timing` persists across scans: 'known' (subdirs seen), 'last'
+    (name, time of the most recent new subdir) and 'deltas' (measured gaps).
     """
     subdirs = {p for p in glob.glob(os.path.join(args.dir, RUN_SUBDIR_GLOB))
                if os.path.isdir(p)}
@@ -94,7 +95,11 @@ def report_subdir_timing(args: argparse.Namespace, timing: dict) -> None:
     for path in new:
         if timing["last"] is not None:
             prev_name, prev_time = timing["last"]
-            print(f"    subdir done in {fmt_duration(now - prev_time)}: "
+            delta = now - prev_time
+            timing["deltas"].append(delta)
+            avg = sum(timing["deltas"]) / len(timing["deltas"])
+            print(f"    subdir done in {fmt_duration(delta)} "
+                  f"(avg {fmt_duration(avg)} over {len(timing['deltas'])}): "
                   f"{os.path.basename(prev_name)}", flush=True)
         timing["known"].add(path)
         timing["last"] = (path, now)
@@ -177,7 +182,7 @@ def main() -> None:
           f"sortino>={args.sortino_min} pval<={args.pval_max} "
           f"every {args.interval}s (Ctrl-C to stop) ===", flush=True)
     seen: dict = {}
-    timing: dict = {"known": set(), "last": None}
+    timing: dict = {"known": set(), "last": None, "deltas": []}
     try:
         while True:
             scan_once(args, seen, timing)
