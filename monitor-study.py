@@ -44,6 +44,9 @@ POLL_SECONDS = 5.0            # seconds between scans
 SORTINO_MIN = 0.30            # a sortino ratio at or above this is "high"
 PVAL_MAX = 0.10               # a p-value at or below this is "low"
 STATUS_GLOB = "status.symbols=*"   # only the param-tagged status copies
+# each param-study run makes its own subdir up front; a new one appearing marks
+# the start of the next run, so the gap between appearances is a run's duration.
+RUN_SUBDIR_GLOB = "*windowsize=*,neighbors=*,knnvarcutoff=*"
 MODELS = (1, 2, 3)
 
 
@@ -68,7 +71,48 @@ def params_from_name(path: str) -> str:
     return base[len("status."):] if base.startswith("status.") else base
 
 
-def scan_once(args: argparse.Namespace, found: dict) -> None:
+def report_subdir_timing(args: argparse.Namespace, timing: dict) -> None:
+    """Report the wall-clock time each run subdir took.
+
+    A new subdir means the next run just started, so the gap since the previous
+    new subdir is the duration of the run that just finished.  We print that time
+    for the subdir that just completed.  `timing` persists across scans: 'known'
+    (subdirs seen) and 'last' (name, time of the most recent new subdir).
+    """
+    subdirs = {p for p in glob.glob(os.path.join(args.dir, RUN_SUBDIR_GLOB))
+               if os.path.isdir(p)}
+    new = sorted(subdirs - timing["known"])
+    now = time.time()
+
+    if not timing["known"]:
+        # first scan: adopt what already exists without inventing a time
+        timing["known"] = subdirs
+        if new:
+            timing["last"] = (new[-1], now)
+        return
+
+    for path in new:
+        if timing["last"] is not None:
+            prev_name, prev_time = timing["last"]
+            print(f"    subdir done in {fmt_duration(now - prev_time)}: "
+                  f"{os.path.basename(prev_name)}", flush=True)
+        timing["known"].add(path)
+        timing["last"] = (path, now)
+
+
+def fmt_duration(seconds: float) -> str:
+    """Human-friendly h/m/s from a seconds count."""
+    seconds = int(round(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m}m{s:02d}s"
+    return f"{s}s"
+
+
+def scan_once(args: argparse.Namespace, found: dict, timing: dict) -> None:
     """One pass: read every matching status file, refresh the accumulated set of
     interesting hits, then dump the whole set (best-first) so the current leaders
     are always visible without scrolling back.
@@ -115,6 +159,8 @@ def scan_once(args: argparse.Namespace, found: dict) -> None:
           f"{interesting_now} interesting now (sortino>={args.sortino_min}, "
           f"pval<={args.pval_max}) | {len(found)} found so far", flush=True)
 
+    report_subdir_timing(args, timing)
+
     # dump everything found so far, most interesting first (highest sortino,
     # then lowest p-value)
     ranked = sorted(found.items(), key=lambda kv: (-kv[1][0], kv[1][1]))
@@ -131,9 +177,10 @@ def main() -> None:
           f"sortino>={args.sortino_min} pval<={args.pval_max} "
           f"every {args.interval}s (Ctrl-C to stop) ===", flush=True)
     seen: dict = {}
+    timing: dict = {"known": set(), "last": None}
     try:
         while True:
-            scan_once(args, seen)
+            scan_once(args, seen, timing)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print("\n=== monitor stopped ===", flush=True)
