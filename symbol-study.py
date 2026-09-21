@@ -96,18 +96,23 @@ RANDOM_SEED = 42
 # symbol = forecast target), in the order given.  Entries may have any length
 # and need not match SELECT_COUNT.  Leave empty ([]) to use RANDOM_SELECTIONS.
 # Ordered best-first by suspected lead-lag strength (target first, leader second).
+# Re-running only QCOM-AAPL (its earlier study was interrupted at ~19/30 trials).
+# Full 10-pair list preserved below -- restore it to run the whole study again.
 EXPLICIT_SELECTIONS = [
-    ["COST", "WMT"],
-    ["AMD", "NVDA"],
-    ["AVGO", "NVDA"],
-    ["BAC", "JPM"],
-    ["T", "TMUS"],
-    ["QCOM", "AAPL"],
-    ["CRM", "MSFT"],
-    ["DIS", "NFLX"],
-    ["CVX", "XOM"],
-    ["MRK", "LLY"]
+    [],
 ]
+# EXPLICIT_SELECTIONS = [
+#     ["COST", "WMT"],
+#     ["AMD", "NVDA"],
+#     ["AVGO", "NVDA"],
+#     ["BAC", "JPM"],
+#     ["T", "TMUS"],
+#     ["QCOM", "AAPL"],
+#     ["CRM", "MSFT"],
+#     ["DIS", "NFLX"],
+#     ["CVX", "XOM"],
+#     ["MRK", "LLY"]
+# ]
 
 
 def selections(pool: list[str], k: int) -> list[tuple[str, ...]]:
