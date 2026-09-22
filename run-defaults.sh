@@ -84,7 +84,7 @@ run_solver() {
     allowShorting=1 \
     riskFreeRate=4.0 \
     normalize=1 \
-    pullDelay=1 \
+    pullDelay=15 \
     uselogit=0 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
     uselars=1  `# uselogit=0 && uselars=1 implies LARS regression` \
     sublinearType="ElasticNetCV" `# model 3 linear regressor: ElasticNetCV (L1+L2, CV alpha) or LassoLarsIC. ElasticNetCV l1_ratio (fit-vs-weed) = knnvarcutoff/1000` \
