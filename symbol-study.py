@@ -25,16 +25,24 @@ Two knobs control which selections are run:
     large pool, so random mode + a cap keeps runs bounded.
 """
 
+import concurrent.futures
 import itertools
 import os
 import random
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # run relative to this script so it finds param-study.py / run-defaults.sh
 SCRIPT_DIR = Path(__file__).resolve().parent
 PARAM_STUDY = SCRIPT_DIR / "param-study.py"
+
+# how many param-study.py runs to execute at once.  Each selection works in its
+# own SYMBOLS-tagged subdirs / cache / status files (see param-study.py), so the
+# runs don't collide; raise/lower to trade throughput against CPU, memory and
+# the load of several concurrent data pulls.
+MAX_PARALLEL = 4
 
 # starting universe of symbols to study
 SYMBOL_POOL = [
@@ -98,21 +106,20 @@ RANDOM_SEED = 42
 # Ordered best-first by suspected lead-lag strength (target first, leader second).
 # Re-running only QCOM-AAPL (its earlier study was interrupted at ~19/30 trials).
 # Full 10-pair list preserved below -- restore it to run the whole study again.
-EXPLICIT_SELECTIONS = [
-    [],
+EXPLICIT_SELECTIONS = []
+
+XEXPLICIT_SELECTIONS = [
+     ["COST", "WMT"],
+     ["AMD", "NVDA"],
+     ["AVGO", "NVDA"],
+     ["BAC", "JPM"],
+     ["T", "TMUS"],
+     ["QCOM", "AAPL"],
+     ["CRM", "MSFT"],
+     ["DIS", "NFLX"],
+     ["CVX", "XOM"],
+     ["MRK", "LLY"]
 ]
-# EXPLICIT_SELECTIONS = [
-#     ["COST", "WMT"],
-#     ["AMD", "NVDA"],
-#     ["AVGO", "NVDA"],
-#     ["BAC", "JPM"],
-#     ["T", "TMUS"],
-#     ["QCOM", "AAPL"],
-#     ["CRM", "MSFT"],
-#     ["DIS", "NFLX"],
-#     ["CVX", "XOM"],
-#     ["MRK", "LLY"]
-# ]
 
 
 def selections(pool: list[str], k: int) -> list[tuple[str, ...]]:
@@ -158,6 +165,35 @@ def random_selections(pool: list[str], k: int, count: int) -> list[tuple[str, ..
     return out
 
 
+def run_combo(index: int, total: int, combo: tuple[str, ...]) -> tuple[str, int]:
+    """Run param-study.py for one selection; return (symbols, returncode).
+
+    Output is captured to a per-selection log rather than streamed to the
+    console so parallel runs don't interleave into an unreadable mess.  The log
+    is tagged with the symbols to match param-study.py's own subdir naming.
+    """
+    # random stagger (> 5s) so the parallel runs don't all fire their first
+    # fresh data pull at once and trip the data-provider rate limit
+    time.sleep(random.uniform(5, 10))
+
+    symbols = " ".join(combo)
+    tag = "symbols=" + "-".join(combo)
+    log_path = SCRIPT_DIR / f"symbol-study.{tag}.log"
+    print(f"### [{index}/{total}] START  SYMBOLS = {symbols}  (log: {log_path.name})")
+
+    # SYMBOLS flows through param-study.py into run-defaults.sh, and also drives
+    # the output-name tagging in param-study.py.
+    env = os.environ | {"SYMBOLS": symbols}
+    with open(log_path, "w") as log:
+        proc = subprocess.run([sys.executable, str(PARAM_STUDY)],
+                              cwd=SCRIPT_DIR, env=env,
+                              stdout=log, stderr=subprocess.STDOUT)
+
+    result = "ok" if proc.returncode == 0 else f"FAILED (exit {proc.returncode})"
+    print(f"### [{index}/{total}] DONE   SYMBOLS = {symbols}  -> {result}")
+    return symbols, proc.returncode
+
+
 def main() -> None:
     if EXPLICIT_SELECTIONS:
         # run the given lists verbatim, in order (first symbol = forecast target)
@@ -174,26 +210,25 @@ def main() -> None:
         if MAX_SELECTIONS > 0:
             combos = combos[:MAX_SELECTIONS]
         mode = "ordered"
-    print(f"=== symbol study ({mode}): {len(combos)} selections ===")
+    total = len(combos)
+    print(f"=== symbol study ({mode}): {total} selections, "
+          f"up to {MAX_PARALLEL} at once ===")
 
+    # Each selection is independent (own SYMBOLS-tagged subdirs / cache), so run
+    # them through a thread pool; subprocess.run releases the GIL while the child
+    # works, so threads give real parallelism here.
     failures = 0
-    for i, combo in enumerate(combos, 1):
-        symbols = " ".join(combo)
-        print("\n" + "=" * 72)
-        print(f"### [{i}/{len(combos)}] SYMBOLS = {symbols}")
-        print("=" * 72)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_PARALLEL) as pool:
+        futures = [pool.submit(run_combo, i, total, combo)
+                   for i, combo in enumerate(combos, 1)]
+        for future in concurrent.futures.as_completed(futures):
+            symbols, returncode = future.result()
+            if returncode != 0:
+                failures += 1
+                print(f"warning: param-study.py exited {returncode} for "
+                      f"SYMBOLS={symbols}", file=sys.stderr)
 
-        # SYMBOLS flows through param-study.py into run-defaults.sh, and also
-        # drives the output-name tagging in param-study.py.
-        env = os.environ | {"SYMBOLS": symbols}
-        proc = subprocess.run([sys.executable, str(PARAM_STUDY)],
-                              cwd=SCRIPT_DIR, env=env)
-        if proc.returncode != 0:
-            failures += 1
-            print(f"warning: param-study.py exited {proc.returncode} for "
-                  f"SYMBOLS={symbols}", file=sys.stderr)
-
-    print(f"\n=== symbol study complete: {len(combos)} selections, "
+    print(f"\n=== symbol study complete: {total} selections, "
           f"{failures} failed ===")
 
 
