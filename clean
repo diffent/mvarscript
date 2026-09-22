@@ -4,3 +4,5 @@ mkdir old.$theDate
 mv target=* old.$theDate
 mv status.* old.$theDate
 mv symbols=* old.$theDate
+
+mv symbol-study.symbols* old.$theDate
