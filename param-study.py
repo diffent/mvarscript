@@ -217,9 +217,14 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int) -> RunResult:
     # tee the run's stdout+stderr to a per-run log in its output folder
     log_path = rundir / "run.log"
     with open(log_path, "w") as log:
+        # decode child output as UTF-8 but replace (not choke on) stray non-UTF-8
+        # bytes -- run-defaults.sh / several.py occasionally emit e.g. a CP1252
+        # 'µ' (0xb5) or 0x80, which under strict decoding raised UnicodeDecodeError
+        # here and aborted the whole study
         proc = subprocess.Popen([str(RUN_SCRIPT)], cwd=SCRIPT_DIR, env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, bufsize=1)
+                                text=True, bufsize=1,
+                                encoding="utf-8", errors="replace")
         for line in proc.stdout:
             sys.stdout.write(line)
             log.write(line)
