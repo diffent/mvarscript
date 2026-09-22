@@ -326,7 +326,10 @@ def run_optimize() -> list[RunResult]:
     print(f"  windowsize   in {OPT_WINDOWSIZE_RANGE} step {OPT_WINDOWSIZE_STEP}")
     print(f"  neighbors    in {OPT_NEIGHBORS_RANGE} step {OPT_NEIGHBORS_STEP}")
     print(f"  knnvarcutoff in {OPT_KNNVARCUTOFF_RANGE} step {OPT_KNNVARCUTOFF_STEP}")
-    best_file = SCRIPT_DIR / OPT_BEST_FILE
+    # tagged by symbols so concurrent studies on different symbols write to
+    # distinct files (the derived .tmp is tagged too) instead of racing on one
+    # shared current_best.txt / .tmp -- see MERGEDRAW_CACHE for the same pattern
+    best_file = SCRIPT_DIR / _tagged(OPT_BEST_FILE)
     print(f"  best-so-far written live to {best_file}")
 
     cache: dict[tuple[int, int, int], RunResult] = {}
