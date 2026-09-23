@@ -240,7 +240,7 @@ annealStall=20
 
 # dual_annealing maxiter (only when useAnneal=1): max global annealing iterations
 # per model 1 solve.
-annealMaxiter=50
+annealMaxiter=100 # set small when we don't care about this model, for speed
 
 diffvol=1 # 0 do not daily difference the volatility, 1 daily difference the volatility
 

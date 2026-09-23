@@ -105,10 +105,10 @@ RUN_METHOD = "optimize"
 # grid or a finite-difference gradient method would.
 OPT_TARGET = "adjustedSortino1"       # top-level status-JSON key to MAXIMIZE;
                                       # any numeric key works (e.g. sortino2)
-OPT_MAX_RUNS = 30                     # number of Optuna trials (== run-defaults runs)
+OPT_MAX_RUNS = 50                     # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (50, 200)      # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (5, 20)         # (min, max) inclusive search range
-OPT_KNNVARCUTOFF_RANGE = (100, 800)   # (min, max) inclusive search range; integer >= 0
+OPT_KNNVARCUTOFF_RANGE = (50, 900)   # (min, max) inclusive search range; integer >= 0
 OPT_WINDOWSIZE_STEP = 10              # search windowsize on this integer grid step (must be >= 1)
 OPT_NEIGHBORS_STEP = 3                # search neighbors on this integer grid step (must be >= 1)
 OPT_KNNVARCUTOFF_STEP = 10            # search knnvarcutoff on this integer grid step (must be >= 1)
