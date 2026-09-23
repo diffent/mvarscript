@@ -88,7 +88,7 @@ SELECT_COUNT = 2
 
 # Selection mode.  If True, draw MAX_SELECTIONS unique selections at random from
 # the pool; if False, enumerate them in order (deduped by CDR-as-set).
-RANDOM_SELECTIONS = True
+RANDOM_SELECTIONS = False
 
 # Cap on how many selections to run.  In random mode this many unique selections
 # are drawn; in ordered mode the first this-many are taken.  Set to 0 for no
@@ -108,7 +108,7 @@ RANDOM_SEED = 42
 # Full 10-pair list preserved below -- restore it to run the whole study again.
 EXPLICIT_SELECTIONS = []
 
-XEXPLICIT_SELECTIONS = [
+EXPLICIT_SELECTIONS = [
      ["COST", "WMT"],
      ["AMD", "NVDA"],
      ["AVGO", "NVDA"],

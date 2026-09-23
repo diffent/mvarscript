@@ -4214,9 +4214,34 @@ else:
   jout["m3_95thCoeffCount"] = len(Bfeed)
 
 try:
+  # adjustedSortino: penalize sortino for low trade activity.  We scale each
+  # model's sortino by (trades actually made / possible trades), where a "trade"
+  # is a backtest forecast that landed OUTSIDE the indeterminate ztol band
+  # (countOutsideMX) and possible trades is the backtest length (the number of
+  # backtest days, = len of the per-day outside-ztol boolean array).  A model
+  # that only trades rarely thus gets its sortino shrunk toward zero.  First
+  # attempt; applied to sortino only, not the sortinop / sortinoNp variants.
+  possibleTrades1 = len(backtestForecastM1outsideOfZTol)
+  possibleTrades2 = len(backtestForecastM2outsideOfZTol)
+  possibleTrades3 = len(backtestForecastM3outsideOfZTol)
+
+  # raw inputs to the adjustment, exported under their own variable names so we
+  # can sanity-check the adjustedSortino math by hand.  countOutsideMX = trades
+  # made (forecasts outside ztol); possibleTradesX = backtest length.
+  jout["countOutsideM1"] = countOutsideM1
+  jout["countOutsideM2"] = countOutsideM2
+  jout["countOutsideM3"] = countOutsideM3
+  jout["possibleTrades1"] = possibleTrades1
+  jout["possibleTrades2"] = possibleTrades2
+  jout["possibleTrades3"] = possibleTrades3
+  # sanity check: possible trades (backtest length) should be identical across
+  # the three models since every model forecasts on the same backtest days.
+  jout["possibleTradesAllEqual"] = (possibleTrades1 == possibleTrades2 == possibleTrades3)
+
   jout["sharpe1"] = sharpe1
   jout["sortino1"] = sortino1
   jout["sortino1p"] = sortino1p
+  jout["adjustedSortino1"] = sortino1 * countOutsideM1 / possibleTrades1 if possibleTrades1 else 0
   # total raw return over the whole backtest ((final-initial)/initial of the
   # equity curve), with no risk-free adjustment.  This is the per-day mean that
   # feeds the sharpe/sortino numerator BEFORE it is divided by (ntrials+1).
@@ -4225,11 +4250,13 @@ try:
   jout["sharpe2"] = sharpe2
   jout["sortino2"] = sortino2
   jout["sortino2p"] = sortino2p
+  jout["adjustedSortino2"] = sortino2 * countOutsideM2 / possibleTrades2 if possibleTrades2 else 0
   jout["rawReturn2"] = percentDiff2
 
   jout["sharpe3"] = sharpe3
   jout["sortino3"] = sortino3
   jout["sortino3p"] = sortino3p
+  jout["adjustedSortino3"] = sortino3 * countOutsideM3 / possibleTrades3 if possibleTrades3 else 0
   jout["rawReturn3"] = percentDiff3
 except Exception as e: # for forward forecast we dont have above ratios
   print("no ratios for forecast")
