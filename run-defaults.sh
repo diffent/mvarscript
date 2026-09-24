@@ -69,6 +69,7 @@ run_solver() {
     windowsize="${WINDOWSIZE:-200}" \
     neighbors="${NEIGHBORS:-20}" \
     knnvarcutoff="${KNNVARCUTOFF:-400}" \
+    elasticalpha="${ELASTICALPHA:-0.01}" `# ElasticNet penalty strength (only used when sublinearType=ElasticNet); tuned by the param study via the ELASTICALPHA env var` \
     volen=21 \
     epsilon1000=2000 \
     exponent=2.0 \
@@ -87,8 +88,8 @@ run_solver() {
     pullDelay=15 \
     uselogit=0 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
     uselars=1  `# uselogit=0 && uselars=1 implies LARS regression` \
-    sublinearType="ElasticNetCV" `# model 3 linear regressor: ElasticNetCV (L1+L2, CV alpha) or LassoLarsIC. ElasticNetCV l1_ratio (fit-vs-weed) = knnvarcutoff/1000` \
-    lassolarsbic=0 `#0 implies AIC (only used by LassoLarsIC; ignored by ElasticNetCV)` \
+    sublinearType="ElasticNet" `# model 3 linear regressor: ElasticNet (L1+L2, fixed alpha=elasticalpha) or LassoLarsIC. ElasticNet l1_ratio (fit-vs-weed) = knnvarcutoff/1000` \
+    lassolarsbic=0 `#0 implies AIC (only used by LassoLarsIC; ignored by ElasticNet)` \
     larsalpha=100 `# not used currently` \
     noboot=1 \
     reuseMergedRaw="${REUSEMERGEDRAW:-0}" `# 1 => skip data pull/align, read mergedraw.csv from OUTDIR (set by the param study on 2nd+ runs)` \

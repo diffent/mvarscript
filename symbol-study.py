@@ -42,7 +42,7 @@ PARAM_STUDY = SCRIPT_DIR / "param-study.py"
 # own SYMBOLS-tagged subdirs / cache / status files (see param-study.py), so the
 # runs don't collide; raise/lower to trade throughput against CPU, memory and
 # the load of several concurrent data pulls.
-MAX_PARALLEL = 4
+MAX_PARALLEL = 1
 
 # starting universe of symbols to study
 SYMBOL_POOL = [

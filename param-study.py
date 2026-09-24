@@ -95,6 +95,12 @@ KNNVARCUTOFFS = centered_grid(400, 100, 3)
 # slower; lower = faster.  Only meaningful when useAnneal=1 in run-defaults.sh.
 ANNEALMAXITERS = centered_grid(100, 50, 3)
 
+# elasticalpha: ElasticNet penalty strength (several.py's elasticalpha, default
+# 0.01).  Smaller = keep more weak predictors, larger = shrink harder toward the
+# constant model.  Only meaningful when sublinearType=ElasticNet in
+# run-defaults.sh.  Spans orders of magnitude, so this is a log-spaced grid.
+ELASTICALPHAS = [0.001, 0.01, 0.1]
+
 
 # --- run method ---------------------------------------------------------------
 # "grid":    exhaustive grid search over WINDOWSIZES x NEIGHBORS (the original).
@@ -108,17 +114,20 @@ RUN_METHOD = "optimize"
 # capped at OPT_MAX_RUNS trials.  Optuna's TPE sampler proposes each next point
 # from a model of the runs seen so far, so it spends the budget far better than a
 # grid or a finite-difference gradient method would.
-OPT_TARGET = "adjustedSortino1"       # top-level status-JSON key to MAXIMIZE;
+OPT_TARGET = "adjustedSortino3"       # top-level status-JSON key to MAXIMIZE;
                                       # any numeric key works (e.g. sortino2)
-OPT_MAX_RUNS = 50                     # number of Optuna trials (== run-defaults runs)
+OPT_MAX_RUNS = 75                     # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (50, 200)      # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (5, 20)         # (min, max) inclusive search range
 OPT_KNNVARCUTOFF_RANGE = (50, 900)   # (min, max) inclusive search range; integer >= 0
-OPT_ANNEALMAXITER_RANGE = (1, 500)   # (min, max) inclusive search range; integer >= 1
+OPT_ANNEALMAXITER_RANGE = (1, 1)   # (min, max) inclusive search range; integer >= 1
+OPT_ELASTICALPHA_RANGE = (1e-4, 1.0)  # (min, max) inclusive search range; float > 0, searched log-scale
 OPT_WINDOWSIZE_STEP = 10              # search windowsize on this integer grid step (must be >= 1)
 OPT_NEIGHBORS_STEP = 3                # search neighbors on this integer grid step (must be >= 1)
 OPT_KNNVARCUTOFF_STEP = 10            # search knnvarcutoff on this integer grid step (must be >= 1)
 OPT_ANNEALMAXITER_STEP = 10           # search annealmaxiter on this integer grid step (must be >= 1)
+# elasticalpha is searched on a continuous log scale (no step): penalty strength
+# spans orders of magnitude, so log-uniform proposals explore it far better.
 OPT_SEED = 42                         # RNG seed for reproducible trial suggestions
 OPT_FAIL_PENALTY = -1e6               # sharpe3 assigned to a failed/ERROR run
 OPT_BEST_FILE = "current_best.txt"     # live "best so far" file, refreshed each trial
@@ -160,9 +169,19 @@ class RunResult:
     neighbors: int
     knnvarcutoff: int
     annealmaxiter: int
+    elasticalpha: float
     metrics: dict[str, float | str]   # status key -> value
     target: float | str              # value of OPT_TARGET (the optimize objective)
     rundir: str                      # this run's output subdirectory name (the tag)
+
+
+def _fmt_alpha(alpha: float) -> str:
+    """Compact, filename-safe rendering of elasticalpha (e.g. 0.01, 0.0034).
+
+    4 significant digits keeps run-dir / table cells short while staying precise
+    enough to tell log-spaced trials apart.
+    """
+    return f"{alpha:.4g}"
 
 
 def read_status_values(status_path: Path, keys: list[str]) -> dict[str, float | str]:
@@ -185,11 +204,12 @@ def read_status_values(status_path: Path, keys: list[str]) -> dict[str, float | 
 
 
 def run_one(windowsize: int, neighbors: int, knnvarcutoff: int,
-            annealmaxiter: int) -> RunResult:
-    """Run a single (windowsize, neighbors, knnvarcutoff, annealmaxiter) point in a clean subdir."""
+            annealmaxiter: int, elasticalpha: float) -> RunResult:
+    """Run a single (windowsize, neighbors, knnvarcutoff, annealmaxiter, elasticalpha) point in a clean subdir."""
     global _first_run_done
     tag = _run_tag(f"windowsize={windowsize},neighbors={neighbors},"
-                   f"knnvarcutoff={knnvarcutoff},annealmaxiter={annealmaxiter}")
+                   f"knnvarcutoff={knnvarcutoff},annealmaxiter={annealmaxiter},"
+                   f"elasticalpha={_fmt_alpha(elasticalpha)}")
     print("\n" + "#" * 64)
     print(f"### {tag}  ->  subdir {tag}/")
     print("#" * 64)
@@ -222,6 +242,7 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int,
         "NEIGHBORS": str(neighbors),
         "KNNVARCUTOFF": str(knnvarcutoff),
         "ANNEALMAXITER": str(annealmaxiter),
+        "ELASTICALPHA": _fmt_alpha(elasticalpha),
         "REUSEMERGEDRAW": "1" if reuse else "0",
     }
     print(f"### reuseMergedRaw={'1 (cached data)' if reuse else '0 (fresh pull)'}")
@@ -267,7 +288,7 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int,
     target = metrics.get(OPT_TARGET, "ERROR")
     print(f"=== {tag}  target({OPT_TARGET})={target} ===")
     return RunResult(windowsize, neighbors, knnvarcutoff, annealmaxiter,
-                     metrics, target, tag)
+                     elasticalpha, metrics, target, tag)
 
 
 def _fmt_metric(value: float | str) -> str:
@@ -283,7 +304,8 @@ def format_table(results: list[RunResult], timestamp: str) -> str:
     """
     # metric columns: the configured keys, with OPT_TARGET appended if missing
     metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET]))
-    headers = ["windowsize", "neighbors", "knnvarcutoff", "annealmaxiter"]
+    headers = ["windowsize", "neighbors", "knnvarcutoff", "annealmaxiter",
+               "elasticalpha"]
     headers += [k + ("*" if k == OPT_TARGET else "") for k in metric_keys]
     # trailing columns: symbols studied (underscore-joined for easy spreadsheet
     # import) and the run's output subdirectory name (to locate its full output)
@@ -292,7 +314,7 @@ def format_table(results: list[RunResult], timestamp: str) -> str:
     symbols_cell = "_".join(SYMBOLS.split()) if SYMBOLS else ""
     rows = [
         [str(r.windowsize), str(r.neighbors), str(r.knnvarcutoff),
-         str(r.annealmaxiter)]
+         str(r.annealmaxiter), _fmt_alpha(r.elasticalpha)]
         + [_fmt_metric(r.metrics.get(k, "ERROR")) for k in metric_keys]
         + [symbols_cell, r.rundir]
         for r in results
@@ -327,9 +349,11 @@ def run_grid() -> list[RunResult]:
     print("neighbors values:   ", NEIGHBORS)
     print("knnvarcutoff values:", KNNVARCUTOFFS)
     print("annealmaxiter values:", ANNEALMAXITERS)
-    return [run_one(ws, nb, kv, am)
-            for ws, nb, kv, am in itertools.product(
-                WINDOWSIZES, NEIGHBORS, KNNVARCUTOFFS, ANNEALMAXITERS)]
+    print("elasticalpha values:", ELASTICALPHAS)
+    return [run_one(ws, nb, kv, am, ea)
+            for ws, nb, kv, am, ea in itertools.product(
+                WINDOWSIZES, NEIGHBORS, KNNVARCUTOFFS, ANNEALMAXITERS,
+                ELASTICALPHAS)]
 
 
 def run_optimize() -> list[RunResult]:
@@ -347,13 +371,14 @@ def run_optimize() -> list[RunResult]:
     print(f"  neighbors     in {OPT_NEIGHBORS_RANGE} step {OPT_NEIGHBORS_STEP}")
     print(f"  knnvarcutoff  in {OPT_KNNVARCUTOFF_RANGE} step {OPT_KNNVARCUTOFF_STEP}")
     print(f"  annealmaxiter in {OPT_ANNEALMAXITER_RANGE} step {OPT_ANNEALMAXITER_STEP}")
+    print(f"  elasticalpha  in {OPT_ELASTICALPHA_RANGE} (log scale)")
     # tagged by symbols so concurrent studies on different symbols write to
     # distinct files (the derived .tmp is tagged too) instead of racing on one
     # shared current_best.txt / .tmp -- see MERGEDRAW_CACHE for the same pattern
     best_file = SCRIPT_DIR / _tagged(OPT_BEST_FILE)
     print(f"  best-so-far written live to {best_file}")
 
-    cache: dict[tuple[int, int, int, int], RunResult] = {}
+    cache: dict[tuple[int, int, int, int, str], RunResult] = {}
     results: list[RunResult] = []
 
     def objective(trial: "optuna.Trial") -> float:
@@ -365,15 +390,21 @@ def run_optimize() -> list[RunResult]:
                                step=OPT_KNNVARCUTOFF_STEP)
         am = trial.suggest_int("annealmaxiter", *OPT_ANNEALMAXITER_RANGE,
                                step=OPT_ANNEALMAXITER_STEP)
-        key = (ws, nb, kv, am)
+        ea = trial.suggest_float("elasticalpha", *OPT_ELASTICALPHA_RANGE,
+                                 log=True)
+        # cache/dedup on the rounded alpha string actually passed to the run
+        # (run-defaults.sh receives _fmt_alpha's 4-sig-fig value), so two trials
+        # that round to the same alpha share one run instead of spending budget twice
+        key = (ws, nb, kv, am, _fmt_alpha(ea))
         result = cache.get(key)
         if result is None:
-            result = run_one(ws, nb, kv, am)
+            result = run_one(ws, nb, kv, am, ea)
             cache[key] = result
             results.append(result)
         else:
             print(f"=== reusing cached run for windowsize={ws},neighbors={nb},"
-                  f"knnvarcutoff={kv},annealmaxiter={am} ===")
+                  f"knnvarcutoff={kv},annealmaxiter={am},"
+                  f"elasticalpha={_fmt_alpha(ea)} ===")
         return numeric_target(result, OPT_FAIL_PENALTY)
 
     def write_best(study: "optuna.Study", trial: "optuna.trial.FrozenTrial") -> None:
@@ -388,7 +419,8 @@ def run_optimize() -> list[RunResult]:
         tag = (f"windowsize={best.params['windowsize']},"
                f"neighbors={best.params['neighbors']},"
                f"knnvarcutoff={best.params['knnvarcutoff']},"
-               f"annealmaxiter={best.params['annealmaxiter']}")
+               f"annealmaxiter={best.params['annealmaxiter']},"
+               f"elasticalpha={_fmt_alpha(best.params['elasticalpha'])}")
         text = (
             "# current best so far (refreshed after each optuna trial)\n"
             f"updated:        {datetime.now():%Y-%m-%d %H:%M:%S}\n"
@@ -398,6 +430,7 @@ def run_optimize() -> list[RunResult]:
             f"neighbors:      {best.params['neighbors']}\n"
             f"knnvarcutoff:   {best.params['knnvarcutoff']}\n"
             f"annealmaxiter:  {best.params['annealmaxiter']}\n"
+            f"elasticalpha:   {_fmt_alpha(best.params['elasticalpha'])}\n"
             f"objective:      {OPT_TARGET} = {best.value}\n"
             f"run subdir:     {tag}/\n"
         )
@@ -415,6 +448,7 @@ def run_optimize() -> list[RunResult]:
     print(f"\n=== optuna best: windowsize={best['windowsize']} "
           f"neighbors={best['neighbors']} knnvarcutoff={best['knnvarcutoff']} "
           f"annealmaxiter={best['annealmaxiter']} "
+          f"elasticalpha={_fmt_alpha(best['elasticalpha'])} "
           f"{OPT_TARGET}={study.best_value} "
           f"({len(study.trials)} trials, {len(results)} unique runs) ===")
     print(f"=== best-so-far file: {best_file} ===")
