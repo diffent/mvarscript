@@ -121,7 +121,10 @@ OPT_WINDOWSIZE_RANGE = (50, 200)      # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (5, 20)         # (min, max) inclusive search range
 OPT_KNNVARCUTOFF_RANGE = (50, 900)   # (min, max) inclusive search range; integer >= 0
 OPT_ANNEALMAXITER_RANGE = (1, 1)   # (min, max) inclusive search range; integer >= 1
-OPT_ELASTICALPHA_RANGE = (1e-4, 1.0)  # (min, max) inclusive search range; float > 0, searched log-scale
+OPT_ELASTICALPHA_RANGE = (1e-6, 1.0)  # (min, max) inclusive search range; float > 0, searched log-scale
+                                      # low floor 1e-6 so the log search covers very small (near-zero)
+                                      # alphas, where weak predictors survive; log-uniform gives each
+                                      # decade equal budget, so these near-zero regions get real coverage
 OPT_WINDOWSIZE_STEP = 10              # search windowsize on this integer grid step (must be >= 1)
 OPT_NEIGHBORS_STEP = 3                # search neighbors on this integer grid step (must be >= 1)
 OPT_KNNVARCUTOFF_STEP = 10            # search knnvarcutoff on this integer grid step (must be >= 1)
@@ -176,12 +179,17 @@ class RunResult:
 
 
 def _fmt_alpha(alpha: float) -> str:
-    """Compact, filename-safe rendering of elasticalpha (e.g. 0.01, 0.0034).
+    """Compact, filename-safe rendering of elasticalpha (e.g. 0.01, 0.000001).
 
-    4 significant digits keeps run-dir / table cells short while staying precise
-    enough to tell log-spaced trials apart.
+    Always fixed-point with a decimal point -- NEVER scientific notation.
+    several.py's arg parser reads a token as a float only when it contains a '.'
+    and otherwise as an int, so a value like 1e-05 (which '%g' would emit for
+    small alphas) would be misparsed via int("1e-05") and crash the run.  We
+    print up to 8 decimal places -- enough to distinguish log-spaced trials down
+    to ~1e-6 -- then strip trailing zeros while keeping at least one decimal.
     """
-    return f"{alpha:.4g}"
+    s = f"{alpha:.8f}".rstrip("0")
+    return s + "0" if s.endswith(".") else s
 
 
 def read_status_values(status_path: Path, keys: list[str]) -> dict[str, float | str]:
