@@ -1555,6 +1555,12 @@ global objcount
 # cumulative high resolution time spent inside theobjPreMask (seconds)
 theobjPreMask_time = 0.0
 
+# When True, theobjPreMask (and theobj) run the original pre-vectorization scalar
+# code path instead of the fast numpy one.  Kept executable (not just commented)
+# so the two can be diffed/benchmarked against each other; the fast path is the
+# default.  Both are verified to produce identical results.
+origSlowPath = False
+
 
 def makeStallCallback(patience):
   """Build a dual_annealing callback that early-stops on a stall.
@@ -1691,11 +1697,13 @@ def theobjAbsPreMask(varMask,A):
   return absdiffsum
 
 def theobj(A):
-  # PERF: all-ones mask built directly instead of appending in a Python loop.
-  varMask = [1.0] * len(A)
-  #varMask = []
-  #for i in range(0, len(A)):
-  #  varMask.append(1.0)
+  if origSlowPath:
+    varMask = []
+    for i in range(0, len(A)):
+      varMask.append(1.0)
+  else:
+    # PERF: all-ones mask built directly instead of appending in a Python loop.
+    varMask = [1.0] * len(A)
 
   return theobjPreMask(varMask, A)
 
@@ -1716,69 +1724,71 @@ def theobjPreMask(varMask, A):
   # high resolution time lapse check for performance tuning
   _tlc_start = time.perf_counter()
 
-  # PERF: the vectorized path below no longer indexes a per-row `fit` list, so
-  # this O(len(regtable)) allocation per call is skipped.  Restore it if you
-  # re-enable the commented scalar loop.
-  #fit = [0 for y in range(0, len(regtable)+1)] # mod
-
-  #print fit
-
   ncorrect = 0
-
-  #checksum = 0   # PERF: checksum was never used; dropped with the scalar loop
 
   #print "rangetest ", range(forecastrow + 1, forecastrow + 1 + windowsize)
 
-  # PERF: AX depends only on A and varMask (both invariant across the row loop),
-  # so build the masked copy once here in a single vectorized op -- this also
-  # removes the copy.deepcopy(A) that was the top profiler hot spot and the
-  # per-element Python masking loop.  Old code left commented just below.
-  _vm = numpy.asarray(varMask[:len(A)])
-  AX = numpy.where(_vm == 0, 0, A) # so same indexing as A
-  #AX = copy.deepcopy(A) # so same indexing as A
-  #for j in range(0, len(AX)):
-  #  if varMask[j] == 0:
-  #    AX[j] = 0
+  if origSlowPath:
+    # --- original scalar path, verbatim (kept for diffing/benchmarking) ---
+    fit = [0 for y in range(0, len(regtable)+1)] # mod
 
-  # PERF: vectorize the whole row loop.  The old body ran `windowsize` Python
-  # iterations, each with its own numpy.dot and scalar sign test; this does one
-  # matrix-vector product over the window plus a vectorized sign-agreement
-  # count.  AXsub and the row block are sliced once.  Old scalar loop commented
-  # below; note it also depended on the `fit` list allocation further up.
-  _lo = forecastrow + 1
-  _hi = forecastrow + 1 + windowsize
-  AXsub = AX[1:ncolsrt-2]
-  fitw = (A[0] * varMask[0]) + regtable_fast[_lo:_hi, 3:ncolsrt].dot(AXsub)
-  targets = regtable_fast[_lo:_hi, CLOSE_MINUS_OPEN_TARGET_COL]
-  ncorrect = int(numpy.count_nonzero(((fitw > 0) & (targets > 0)) |
-                                     ((fitw < 0) & (targets < 0))))
-  # checksum (sum of fit) was accumulated here but never used, so it is dropped.
+    #print fit
 
-  #for i in range(forecastrow + 1, forecastrow + 1 + windowsize):
-  #
-  #  fit[i] = 1*A[0]*varMask[0]
-  #
-  #  #nvar = 1
-  #
-  #  #if False:
-  #
-  #  #AX = copy.deepcopy(A) # so same indexing as A   # PERF: hoisted above loop
-  #  #
-  #  #for j in range(0, len(AX)):
-  #  #  if varMask[j] == 0:
-  #  #    AX[j] = 0
-  #
-  #  thedot = numpy.dot(AX[1:ncolsrt-2], regtable_fast[i, 3:ncolsrt])
-  #  fit[i] += thedot
-  #
-  #  #else:
-  #  #  for j in range(1,ncolsrt-2):
-  #  #    # need to start at 3 so j starts at 1
-  #  #    fit[i] = fit[i] + A[j]*regtable_fast[i, j+2]
-  #
-  #  if ((fit[i] > 0) and (regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL] > 0)) or ((fit[i] < 0) and (regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL] < 0)):
-  #     ncorrect += 1
-  #  checksum += fit[i]
+    checksum = 0
+
+    for i in range(forecastrow + 1, forecastrow + 1 + windowsize):
+
+      fit[i] = 1*A[0]*varMask[0]
+
+      #nvar = 1
+
+      #if False:
+
+      AX = copy.deepcopy(A) # so same indexing as A
+
+      for j in range(0, len(AX)):
+        if varMask[j] == 0:
+          AX[j] = 0
+
+      thedot = numpy.dot(AX[1:ncolsrt-2], regtable_fast[i, 3:ncolsrt])
+      fit[i] += thedot
+
+      #else:
+      #  for j in range(1,ncolsrt-2):
+      #    # need to start at 3 so j starts at 1
+      #    #print "ij = ", i, " ", j
+      #    #print type(A[j])
+      #    #print type(regtable_fast[i, j+2])
+      #    #TEST fit_i = fit[i]
+      #    fit[i] = fit[i] + A[j]*regtable_fast[i, j+2]
+      #    #TEST fit_i = fit_i + A[j]*regtable[i][j+2]
+
+        #TEST print fit[i], " ", fit_i
+      #  nvar += 1
+
+      #print "nvar = ", nvar
+
+      if ((fit[i] > 0) and (regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL] > 0)) or ((fit[i] < 0) and (regtable_fast[i,CLOSE_MINUS_OPEN_TARGET_COL] < 0)):
+         ncorrect += 1
+      checksum += fit[i]
+  else:
+    # --- PERF: vectorized path (default) ---
+    # AX depends only on A and varMask (both invariant across the window), so
+    # build the masked copy once in a single numpy op -- this removes the
+    # copy.deepcopy(A) that was the top profiler hot spot and the per-element
+    # masking loop.  The whole row loop then collapses to one matrix-vector
+    # product plus a vectorized sign-agreement count (no per-row `fit` list, no
+    # per-row numpy.dot).
+    _vm = numpy.asarray(varMask[:len(A)])
+    AX = numpy.where(_vm == 0, 0, A) # so same indexing as A
+    _lo = forecastrow + 1
+    _hi = forecastrow + 1 + windowsize
+    AXsub = AX[1:ncolsrt-2]
+    fitw = (A[0] * varMask[0]) + regtable_fast[_lo:_hi, 3:ncolsrt].dot(AXsub)
+    targets = regtable_fast[_lo:_hi, CLOSE_MINUS_OPEN_TARGET_COL]
+    ncorrect = int(numpy.count_nonzero(((fitw > 0) & (targets > 0)) |
+                                       ((fitw < 0) & (targets < 0))))
+    # checksum (sum of fit) was accumulated in the scalar path but never used.
 
   #for q in A:
   #  #print "q = ", q
