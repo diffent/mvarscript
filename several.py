@@ -1633,6 +1633,14 @@ def theobjAbsPreMask(varMask,A):
 
   #print "rangetest ", range(forecastrow + 1, forecastrow + 1 + windowsize)
 
+  # PERF: AX depends only on A and varMask, both invariant across the row loop,
+  # so build it once here instead of deep-copying A on every row.  Old per-row
+  # code left commented inside the loop below.
+  AX = copy.deepcopy(A) # so same indexing as A
+  for j in range(0, len(AX)):
+    if varMask[j] == 0:
+      AX[j] = 0
+
   for i in range(forecastrow + 1, forecastrow + 1 + windowsize):
 
     fit[i] = 1*A[0]*varMask[0]
@@ -1645,11 +1653,11 @@ def theobjAbsPreMask(varMask,A):
 
     ASub = A[1:ncolsrt-2] # will not be used soon
 
-    AX = copy.deepcopy(A) # so same indexing as A
-
-    for j in range(0, len(AX)):
-      if varMask[j] == 0:
-        AX[j] = 0
+    #AX = copy.deepcopy(A) # so same indexing as A   # PERF: hoisted above loop
+    #
+    #for j in range(0, len(AX)):
+    #  if varMask[j] == 0:
+    #    AX[j] = 0
 
     thedot = numpy.dot(AX[1:ncolsrt-2], regtable_fast[i, 3:ncolsrt])
     fit[i] += thedot
@@ -1716,6 +1724,15 @@ def theobjPreMask(varMask, A):
 
   #print "rangetest ", range(forecastrow + 1, forecastrow + 1 + windowsize)
 
+  # PERF: AX depends only on A and varMask, both invariant across the row loop,
+  # so build it once here instead of deep-copying A on every row (this deepcopy
+  # was ~23M calls / the top profiler hot spot).  Old per-row code left
+  # commented inside the loop below.
+  AX = copy.deepcopy(A) # so same indexing as A
+  for j in range(0, len(AX)):
+    if varMask[j] == 0:
+      AX[j] = 0
+
   for i in range(forecastrow + 1, forecastrow + 1 + windowsize):
 
     fit[i] = 1*A[0]*varMask[0]
@@ -1724,11 +1741,11 @@ def theobjPreMask(varMask, A):
 
     #if False:
 
-    AX = copy.deepcopy(A) # so same indexing as A
-
-    for j in range(0, len(AX)):
-      if varMask[j] == 0:
-        AX[j] = 0
+    #AX = copy.deepcopy(A) # so same indexing as A   # PERF: hoisted above loop
+    #
+    #for j in range(0, len(AX)):
+    #  if varMask[j] == 0:
+    #    AX[j] = 0
 
     thedot = numpy.dot(AX[1:ncolsrt-2], regtable_fast[i, 3:ncolsrt])
     fit[i] += thedot
