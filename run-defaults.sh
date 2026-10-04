@@ -46,6 +46,19 @@ BACKTEST_NTRIALS=100
 # matching pair is easy to correlate
 RUN_TS=$(date +%Y%m%d-%H%M%S)
 
+# --- optional performance profiling -----------------------------------------
+# Set PROFILE=1 to run several.py under Python's stdlib cProfile so hot spots
+# (e.g. theobjPreMask) can be traced.  Off by default so normal runs are
+# unaffected.  Each phase writes a timestamped .prof into OUTDIR, and the top
+# cumulative-time functions are printed after the run.  Inspect later with e.g.
+#   python3 -m pstats profile.<ts>.n<ntrials>.prof
+#   # or visually:  pip install snakeviz && snakeviz profile.*.prof
+# NOTE: cProfile adds per-call overhead, so absolute times inflate for very hot
+# functions, but the relative hot-spot ranking stays accurate.
+PROFILE="${PROFILE:-1}"
+# how many top functions to print after a profiled run
+PROFILE_TOP="${PROFILE_TOP:-30}"
+
 # run_solver <ntrials> <m1ZTol> <m2ZTol> <m3ZTol>
 # every other solver parameter is held constant across both phases.
 run_solver() {
@@ -57,10 +70,23 @@ run_solver() {
   # control/kill-switch file the .py's monitor thread watches; delete it to stop
   touch running
 
+  # Build the interpreter launcher.  Normally just "python3", but when
+  # PROFILE=1 we front it with cProfile so this phase's run is traced.  Kept as
+  # an unquoted variable so it word-splits into argv before "$PY"; PROF_OUT is
+  # timestamp-based (no spaces) so splitting is safe.
+  PROF_OUT=""
+  LAUNCHER="python3"
+  if [ "$PROFILE" = "1" ]; then
+    PROF_OUT="$OUTDIR/profile.${RUN_TS}.n${ntrials_arg}.prof"
+    LAUNCHER="python3 -m cProfile -o $PROF_OUT"
+    echo "=== profiling enabled: writing $PROF_OUT ==="
+  fi
+
   # shellcheck disable=SC2086  # SYMBOLS is intentionally word-split into args
   # see options of several.py which can be found by running several.py as a python script w/o args
   # for more details of what these args do
-  python3 "$PY" \
+  # shellcheck disable=SC2086  # LAUNCHER is intentionally word-split into argv
+  $LAUNCHER "$PY" \
     useopen=0 \
     polyiokey="$POLYIOKEY" \
     cryptocomparekey="$CRYPTOCOMPAREKEY" \
@@ -88,7 +114,7 @@ run_solver() {
     pullDelay=15 \
     uselogit=0 `# uselogit=1 && uselars=0 implies k nearest neighbors` \
     uselars=1  `# uselogit=0 && uselars=1 implies LARS regression` \
-    sublinearType="ElasticNet" `# model 3 linear regressor: ElasticNet (L1+L2, fixed alpha=elasticalpha) or LassoLarsIC. ElasticNet l1_ratio (fit-vs-weed) = knnvarcutoff/1000` \
+    sublinearType="LassoLarsIC" `# model 3 linear regressor: ElasticNet (L1+L2, fixed alpha=elasticalpha) or LassoLarsIC. ElasticNet l1_ratio (fit-vs-weed) = knnvarcutoff/1000` \
     lassolarsbic=0 `#0 implies AIC (only used by LassoLarsIC; ignored by ElasticNet)` \
     larsalpha=100 `# not used currently` \
     noboot=1 \
@@ -97,6 +123,15 @@ run_solver() {
     dyncutoff=0 \
     scramblesens=1 \
     $SYMBOLS
+
+  # If we profiled this phase, print the top hot spots so they are visible in
+  # the run log without a separate inspection step.
+  if [ "$PROFILE" = "1" ] && [ -f "$PROF_OUT" ]; then
+    echo "=== profile hot spots (top $PROFILE_TOP by cumulative time): $PROF_OUT ==="
+    python3 -c "import pstats, sys; p = pstats.Stats(sys.argv[1]); p.sort_stats('cumulative').print_stats(int(sys.argv[2]))" "$PROF_OUT" "$PROFILE_TOP"
+    echo "=== profile hot spots (top $PROFILE_TOP by total/own time) ==="
+    python3 -c "import pstats, sys; p = pstats.Stats(sys.argv[1]); p.sort_stats('tottime').print_stats(int(sys.argv[2]))" "$PROF_OUT" "$PROFILE_TOP"
+  fi
 }
 
 # --- phase 1: backtest. the 0.0 ztols we pass are ignored because backtest mode

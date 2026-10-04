@@ -1552,6 +1552,9 @@ def forecast1(A, i):
 
 global objcount
 
+# cumulative high resolution time spent inside theobjPreMask (seconds)
+theobjPreMask_time = 0.0
+
 
 def makeStallCallback(patience):
   """Build a dual_annealing callback that early-stops on a stall.
@@ -1694,10 +1697,14 @@ def theobjPreMask(varMask, A):
   #print("varMask =", varMask)
 
   global objcount
+  global theobjPreMask_time
 
   objcount += 1
 
-  #print "computing ", objcount, "\r",  
+  #print "computing ", objcount, "\r",
+
+  # high resolution time lapse check for performance tuning
+  _tlc_start = time.perf_counter()
 
   fit = [0 for y in range(0, len(regtable)+1)] # mod
 
@@ -1753,6 +1760,13 @@ def theobjPreMask(varMask, A):
 
   if debug:
     print("theobj ncorrect = ", ncorrect) #, "\r",
+
+  # high resolution time lapse check for performance tuning
+  _tlc_elapsed = time.perf_counter() - _tlc_start
+  theobjPreMask_time += _tlc_elapsed
+  if objcount % 1000 == 0:
+    print("theobjPreMask timing: calls=%d  last=%.6fms  total=%.4fs  avg=%.6fms" % (
+      objcount, _tlc_elapsed * 1000.0, theobjPreMask_time, (theobjPreMask_time / objcount) * 1000.0))
 
   return -ncorrect
 
