@@ -1772,6 +1772,8 @@ def theobjPreMask(varMask, A):
          ncorrect += 1
       checksum += fit[i]
   else:
+    # this code written automatically by claude to replace the above low level python for speed
+    # tested by claude but not yet in a real use case
     # --- PERF: vectorized path (default) ---
     # AX depends only on A and varMask (both invariant across the window), so
     # build the masked copy once in a single numpy op -- this removes the
