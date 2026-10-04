@@ -4303,7 +4303,7 @@ try:
   jout["sharpe1"] = sharpe1
   jout["sortino1"] = sortino1
   jout["sortino1p"] = sortino1p
-  jout["adjustedSortino1"] = sortino1 * countOutsideM1 / possibleTrades1 if possibleTrades1 else 0
+  jout["adjustedSortino1"] = sortino1 * pow(countOutsideM1 / possibleTrades1, 2) if possibleTrades1 else 0
   # total raw return over the whole backtest ((final-initial)/initial of the
   # equity curve), with no risk-free adjustment.  This is the per-day mean that
   # feeds the sharpe/sortino numerator BEFORE it is divided by (ntrials+1).
@@ -4312,13 +4312,13 @@ try:
   jout["sharpe2"] = sharpe2
   jout["sortino2"] = sortino2
   jout["sortino2p"] = sortino2p
-  jout["adjustedSortino2"] = sortino2 * countOutsideM2 / possibleTrades2 if possibleTrades2 else 0
+  jout["adjustedSortino2"] = sortino2 * pow(countOutsideM2 / possibleTrades2, 2) if possibleTrades2 else 0
   jout["rawReturn2"] = percentDiff2
 
   jout["sharpe3"] = sharpe3
   jout["sortino3"] = sortino3
   jout["sortino3p"] = sortino3p
-  jout["adjustedSortino3"] = sortino3 * countOutsideM3 / possibleTrades3 if possibleTrades3 else 0
+  jout["adjustedSortino3"] = sortino3 * pow(countOutsideM3 / possibleTrades3, 2) if possibleTrades3 else 0
   jout["rawReturn3"] = percentDiff3
 except Exception as e: # for forward forecast we dont have above ratios
   print("no ratios for forecast")
