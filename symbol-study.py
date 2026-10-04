@@ -108,6 +108,8 @@ RANDOM_SEED = 42
 # Full 10-pair list preserved below -- restore it to run the whole study again.
 EXPLICIT_SELECTIONS = []
 
+# orig order
+
 EXPLICIT_SELECTIONS = [
      ["COST", "WMT"],
      ["AMD", "NVDA"],
@@ -121,6 +123,10 @@ EXPLICIT_SELECTIONS = [
      ["MRK", "LLY"]
 ]
 
+# deep dive on one
+EXPLICIT_SELECTIONS = [
+     ["AMD", "NVDA"],
+]
 
 def selections(pool: list[str], k: int) -> list[tuple[str, ...]]:
     """Selections of k distinct symbols from pool.
