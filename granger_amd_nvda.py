@@ -6,15 +6,20 @@ Side-quest utility, standalone -- does not touch several.py or any run output.
 It reads the latest saved per-symbol CSVs (AMD.csv / NVDA.csv, as written by the
 solver pipeline), aligns them on Date, optionally restricts to a trailing window
 of N points counted back from the most recent day, makes the series stationary
-(log returns of Close by default), and runs statsmodels' Granger causality test
-for the hypothesis that NVDA's past helps predict AMD beyond AMD's own past.
+(daily first-difference of Close by default), and runs statsmodels' Granger
+causality test for whether NVDA's past helps predict AMD beyond AMD's own past.
+
+By default both assets use delta-close (close-to-close difference).  With
+--target-closeopen the caused (target) asset is instead modelled as same-day
+Close-Open (the intraday move), while the causing asset still uses delta-close.
 
 The CSVs are newest-first with header: Date,Open,High,Low,Close,Volume
 
 Examples:
-  python3 granger_amd_nvda.py                 # auto-find latest, last 250 pts, lags 1..5
-  python3 granger_amd_nvda.py --window 120     # trailing 120 trading days
-  python3 granger_amd_nvda.py --window 0       # use all available aligned points
+  python3 granger_amd_nvda.py                  # auto-find latest, last 250 pts, lags 1..5
+  python3 granger_amd_nvda.py --target-closeopen  # AMD modelled as Close-Open
+  python3 granger_amd_nvda.py --window 120      # trailing 120 trading days
+  python3 granger_amd_nvda.py --window 0        # use all available aligned points
   python3 granger_amd_nvda.py --maxlag 10 --both
   python3 granger_amd_nvda.py --amd path/to/AMD.csv --nvda path/to/NVDA.csv
 """
@@ -50,15 +55,14 @@ def find_latest(filename, search_root="."):
     return best
 
 
-def load_prices(path, col):
-    """Load one symbol CSV into a Date-indexed Series of the chosen column,
-    sorted chronologically (oldest -> newest)."""
+def load_ohlc(path):
+    """Load one symbol CSV into a Date-indexed OHLCV DataFrame, sorted
+    chronologically (oldest -> newest)."""
     df = pd.read_csv(path)
-    if "Date" not in df.columns or col not in df.columns:
-        sys.exit("error: %s missing required columns (need Date and %s)" % (path, col))
+    if "Date" not in df.columns:
+        sys.exit("error: %s missing required Date column" % path)
     df["Date"] = pd.to_datetime(df["Date"])
-    df = df[["Date", col]].dropna().sort_values("Date")
-    return df.set_index("Date")[col]
+    return df.sort_values("Date").set_index("Date")
 
 
 def make_stationary(series, mode):
@@ -127,6 +131,11 @@ def main():
                          "(default: diff = daily first difference of Close)")
     ap.add_argument("--both", action="store_true",
                     help="also test the reverse direction (AMD -> NVDA)")
+    ap.add_argument("--target-closeopen", action="store_true",
+                    help="model the CAUSED (target) asset as same-day Close-Open "
+                         "instead of its delta-close; the CAUSING asset still uses "
+                         "delta-close (--transform).  Applies to whichever asset is "
+                         "the caused one in each tested direction.")
     args = ap.parse_args()
 
     amd_path = args.amd or find_latest("AMD.csv")
@@ -139,24 +148,46 @@ def main():
     print("AMD  file: %s" % amd_path)
     print("NVDA file: %s" % nvda_path)
 
-    amd = load_prices(amd_path, args.col)
-    nvda = load_prices(nvda_path, args.col)
+    raw = {"AMD": load_ohlc(amd_path), "NVDA": load_ohlc(nvda_path)}
+    for sym, d in raw.items():
+        if args.col not in d.columns:
+            sys.exit("error: %s CSV missing %r column" % (sym, args.col))
+        if args.target_closeopen and ("Open" not in d.columns or "Close" not in d.columns):
+            sys.exit("error: %s CSV needs Open and Close for --target-closeopen" % sym)
 
-    # align on common dates (inner join), chronological order
-    df = pd.concat({"AMD": amd, "NVDA": nvda}, axis=1).dropna()
+    # Build the two representations each asset can play:
+    #   causing role -> delta-close (the chosen --transform, default diff of Close)
+    #   caused  role -> same-day Close-Open if --target-closeopen, else delta-close
+    def causing_series(sym):
+        return make_stationary(raw[sym][args.col], args.transform)
+
+    def caused_series(sym):
+        if args.target_closeopen:
+            return raw[sym]["Close"] - raw[sym]["Open"]   # intraday move, already a delta
+        return make_stationary(raw[sym][args.col], args.transform)
+
+    caused_label = "Close-Open" if args.target_closeopen else ("delta-close(%s)" % args.transform)
+    causing_label = "delta-close(%s)" % args.transform
+
+    # Align all needed series on common dates; dropna removes the leading NaN the
+    # delta-close transform introduces, so every column shares the same sample.
+    df = pd.DataFrame({
+        "AMD_causing": causing_series("AMD"),
+        "AMD_caused": caused_series("AMD"),
+        "NVDA_causing": causing_series("NVDA"),
+        "NVDA_caused": caused_series("NVDA"),
+    }).dropna()
     if df.empty:
         sys.exit("error: no overlapping dates between the two files")
-
-    # transform for stationarity, then drop the NaN(s) the transform introduces
-    df = df.apply(lambda s: make_stationary(s, args.transform)).dropna()
 
     # trailing window counted back from the most recent day
     if args.window and args.window > 0:
         df = df.iloc[-args.window:]
 
     n = len(df)
-    print("\ntransform=%s  aligned points used=%d  (%s -> %s)  maxlag=%d"
-          % (args.transform, n, df.index[0].date(), df.index[-1].date(), args.maxlag))
+    print("\ncaused=%s  causing=%s  points used=%d  (%s -> %s)  maxlag=%d"
+          % (caused_label, causing_label, n,
+             df.index[0].date(), df.index[-1].date(), args.maxlag))
 
     need = (args.maxlag + 1) * 3
     if n < need:
@@ -164,15 +195,18 @@ def main():
                  "maxlag=%d (increase --window or lower --maxlag)"
                  % (n, need, args.maxlag))
 
-    print("\nstationarity (ADF on the transformed series):")
-    adf_report("AMD", df["AMD"])
-    adf_report("NVDA", df["NVDA"])
+    print("\nstationarity (ADF on the series actually used):")
+    adf_report("AMD caused[%s]" % caused_label, df["AMD_caused"])
+    adf_report("NVDA causing[%s]" % causing_label, df["NVDA_causing"])
+    if args.both:
+        adf_report("NVDA caused[%s]" % caused_label, df["NVDA_caused"])
+        adf_report("AMD causing[%s]" % causing_label, df["AMD_causing"])
 
-    # primary question: AMD = f(NVDA)  <=>  does NVDA Granger-cause AMD?
-    run_granger(df["AMD"].values, df["NVDA"].values, "AMD", "NVDA", args.maxlag)
+    # primary question: AMD = f(NVDA)  <=>  does NVDA(delta-close) Granger-cause AMD(caused)?
+    run_granger(df["AMD_caused"].values, df["NVDA_causing"].values, "AMD", "NVDA", args.maxlag)
 
     if args.both:
-        run_granger(df["NVDA"].values, df["AMD"].values, "NVDA", "AMD", args.maxlag)
+        run_granger(df["NVDA_caused"].values, df["AMD_causing"].values, "NVDA", "AMD", args.maxlag)
 
     print("\nnote: Granger causality is predictive precedence, not true causation.")
 
