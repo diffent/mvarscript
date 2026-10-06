@@ -55,7 +55,7 @@ RUN_TS=$(date +%Y%m%d-%H%M%S)
 #   # or visually:  pip install snakeviz && snakeviz profile.*.prof
 # NOTE: cProfile adds per-call overhead, so absolute times inflate for very hot
 # functions, but the relative hot-spot ranking stays accurate.
-PROFILE="${PROFILE:-1}"
+PROFILE="${PROFILE:-0}"
 # how many top functions to print after a profiled run
 PROFILE_TOP="${PROFILE_TOP:-30}"
 
@@ -105,6 +105,7 @@ run_solver() {
     m3ZTol="$m3_arg" \
     model1minabs=0 `# 1 => model 1 minimizes sum of abs residuals (BFGS can solve this); 0 => directional sign-count objective, which needs simulated annealing and is a no-op under modern scipy/BFGS` \
     useAnneal=1 \
+    annealMaxiter="${ANNEALMAXITER:-100}" `# dual_annealing max global iterations (param study sets ANNEALMAXITER; several.py's option is camelCase annealMaxiter, default 100)` \
     shareCount=30.0 \
     costPerTrade=5.0 \
     daysWithheld=0 \

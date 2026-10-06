@@ -215,6 +215,7 @@ costPerTrade=10.0 # dollars
 allowShorting=1
 riskFreeRate=4.0
 daysWithheld=0
+nsegments=3 # number of contiguous backtest segments used for the minSegmentSortino consistency metric (reported only)
 reuseMergedRaw=0 # if 1, symbol list must be the same as when it was previously run with 0 (0 = full download)
 pullDelay=15 # seconds between pulls to avoid overloading the API if you use polygon.io free plan. 
 
@@ -4320,6 +4321,55 @@ try:
   jout["sortino3p"] = sortino3p
   jout["adjustedSortino3"] = sortino3 * pow(countOutsideM3 / possibleTrades3, 1.5) if possibleTrades3 else 0
   jout["rawReturn3"] = percentDiff3
+
+  # --- minSegmentSortino: consistency-of-return guardrail (reported only) -----
+  # Split the per-day return series into `nsegments` contiguous chunks and
+  # compute a Sortino ratio within each (mean daily excess return / downside
+  # deviation), then report the MINIMUM across segments.  A front-loaded equity
+  # curve (big early gain, flat later) yields a weak late segment and so a low
+  # minimum, whereas a steadily-earning curve stays positive in every segment.
+  # This does NOT feed sortino/adjustedSortino; it is an independent diagnostic.
+  def minSegmentSortino(dailyReturns, nseg):
+    dailyRF = 0.01 * riskFreeRate / 252.0
+    n = len(dailyReturns)
+    if nseg < 1 or n < nseg:
+      return 0
+    arr = numpy.asarray(dailyReturns, dtype=float)
+    bounds = numpy.linspace(0, n, nseg + 1).astype(int)
+    worst = None
+    for s in range(0, nseg):
+      seg = arr[bounds[s]:bounds[s + 1]]
+      if len(seg) == 0:
+        continue
+      downside = numpy.std(numpy.where(seg < 0, seg, 0.0)) # downside deviation
+      num = numpy.mean(seg) - dailyRF
+      if downside > 0:
+        ss = num / downside
+        if numpy.isinf(ss) or numpy.isnan(ss):
+          ss = 0
+      elif num > 0:
+        # no losing days and a positive return: a clean strong segment -- do not
+        # let it define the 'worst' segment (skip it from the minimum)
+        continue
+      else:
+        # no downside variance but non-positive return => flat/weak segment
+        ss = 0
+      worst = ss if worst is None else min(worst, ss)
+    return worst if worst is not None else 0
+
+  jout["minSegmentSortino1"] = minSegmentSortino(percentDiffArray1, nsegments)
+  jout["minSegmentSortino2"] = minSegmentSortino(percentDiffArray2, nsegments)
+  jout["minSegmentSortino3"] = minSegmentSortino(percentDiffArray3, nsegments)
+
+  # trade-count-penalized variant, mirroring adjustedSortino: scale the worst
+  # segment's Sortino by (trades taken / possible trades)^1.5 so a model that
+  # rarely trades is shrunk toward zero.  NOTE: like adjustedSortino this just
+  # multiplies, so when minSegmentSortino is negative (a front-loaded/weak
+  # model) the factor pulls it *up* toward zero; the penalty is only strictly a
+  # penalty in the positive region.
+  jout["adjustedMinSegmentSortino1"] = jout["minSegmentSortino1"] * pow(countOutsideM1 / possibleTrades1, 1.5) if possibleTrades1 else 0
+  jout["adjustedMinSegmentSortino2"] = jout["minSegmentSortino2"] * pow(countOutsideM2 / possibleTrades2, 1.5) if possibleTrades2 else 0
+  jout["adjustedMinSegmentSortino3"] = jout["minSegmentSortino3"] * pow(countOutsideM3 / possibleTrades3, 1.5) if possibleTrades3 else 0
 except Exception as e: # for forward forecast we dont have above ratios
   print("no ratios for forecast")
   

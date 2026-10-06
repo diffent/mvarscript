@@ -114,13 +114,15 @@ RUN_METHOD = "optimize"
 # capped at OPT_MAX_RUNS trials.  Optuna's TPE sampler proposes each next point
 # from a model of the runs seen so far, so it spends the budget far better than a
 # grid or a finite-difference gradient method would.
+# minSegmentSortino1
+# adjustedSortino1
 OPT_TARGET = "adjustedSortino1"       # top-level status-JSON key to MAXIMIZE;
                                       # any numeric key works (e.g. sortino2)
 OPT_MAX_RUNS = 100                    # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (50, 200)      # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (2, 190)        # (min, max) inclusive search range
 OPT_KNNVARCUTOFF_RANGE = (50, 900)    # (min, max) inclusive search range; integer >= 0
-OPT_ANNEALMAXITER_RANGE = (1, 500)    # (min, max) inclusive search range; integer >= 1
+OPT_ANNEALMAXITER_RANGE = (1, 1000)    # (min, max) inclusive search range; integer >= 1
 OPT_ELASTICALPHA_RANGE = (1e-6, 1.0)  # (min, max) inclusive search range; float > 0, searched log-scale
                                       # low floor 1e-6 so the log search covers very small (near-zero)
                                       # alphas, where weak predictors survive; log-uniform gives each
