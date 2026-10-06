@@ -29,12 +29,16 @@ Usage:
     python3 monitor-study.py --dir /path/to/runs
     python3 monitor-study.py --sortino-min 0.4 --pval-max 0.05 --interval 2
     python3 monitor-study.py --glob 'status.symbols=*'
+    python3 monitor-study.py --open-pdfs                 # pop each run's equity-curve
+                                                          # PDF (pval<0.01) in Preview
+    python3 monitor-study.py --open-pdfs --open-max 5 --open-pval-max 0.005
 """
 
 import argparse
 import glob
 import json
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -49,6 +53,10 @@ STATUS_GLOB = "status.symbols=*"   # only the param-tagged status copies
 RUN_SUBDIR_GLOB = "*windowsize=*,neighbors=*,knnvarcutoff=*"
 OUTFILE = "interesting.txt"   # ranked hits are (over)written here each cycle
 MODELS = (1, 2, 3)
+# per-run equity-curve plot that lives inside each run's folder (the folder name
+# is the run's param tag, i.e. the rightmost column of this monitor's output)
+PDF_NAME = "gainsOverTimeCumulative.pdf"
+OPEN_PVAL_MAX = 0.01          # only auto-open PDFs for runs with a hit below this
 
 
 def parse_args() -> argparse.Namespace:
@@ -68,6 +76,20 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--outfile", default=OUTFILE,
                    help=f"file (in --dir) overwritten each cycle with the current "
                         f"ranked hits (default: {OUTFILE!r})")
+    p.add_argument("--open-pdfs", action="store_true",
+                   help=f"macOS only: open each qualifying run's {PDF_NAME} in "
+                        f"Preview.  A PDF already open in Preview is not re-opened.")
+    p.add_argument("--open-pval-max", type=float, default=OPEN_PVAL_MAX,
+                   help=f"only open PDFs for runs with a hit p-value below this "
+                        f"(default: {OPEN_PVAL_MAX})")
+    p.add_argument("--open-max", type=int, default=0, metavar="N",
+                   help="cap the number of distinct PDFs opened, best-first "
+                        "(0 = no cap, default)")
+    p.add_argument("--tabbed", action=argparse.BooleanOptionalAction, default=True,
+                   help="after opening, collapse Preview's windows into tabs of a "
+                        "single window (Window > Merge All Windows; needs a one-time "
+                        "Accessibility grant).  Use --no-tabbed to keep separate "
+                        "windows. (default: tabbed)")
     return p.parse_args()
 
 
@@ -123,7 +145,124 @@ def fmt_duration(seconds: float) -> str:
     return f"{s}s"
 
 
-def scan_once(args: argparse.Namespace, found: dict, timing: dict) -> None:
+def preview_open_paths() -> set:
+    """Set of real file paths currently open in macOS Preview.
+
+    Returns an empty set when not on macOS, when Preview is not already running
+    (we deliberately do NOT launch it just to ask), or when the query fails --
+    in those cases we fall back to the per-session dedup only.
+    """
+    if sys.platform != "darwin":
+        return set()
+    try:
+        # only query if Preview is already up, so we never spawn it ourselves
+        if subprocess.run(["pgrep", "-x", "Preview"],
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode != 0:
+            return set()
+        # Emit one POSIX path per line.  We must NOT let osascript return the
+        # list comma-separated: our run folders contain commas, so a comma split
+        # would shred the paths.  A linefeed delimiter cannot occur in a path.
+        script = ('set out to ""\n'
+                  'tell application "Preview"\n'
+                  '  repeat with d in documents\n'
+                  '    set out to out & (path of d) & linefeed\n'
+                  '  end repeat\n'
+                  'end tell\n'
+                  'return out')
+        out = subprocess.run(["osascript", "-e", script],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
+    if out.returncode != 0:
+        return set()
+    paths = (line.strip() for line in out.stdout.splitlines() if line.strip())
+    return {os.path.realpath(p) for p in paths}
+
+
+def merge_preview_windows_into_tabs() -> None:
+    """Best-effort: collapse all Preview windows into tabs of one window via the
+    Window > Merge All Windows menu item (GUI scripting).
+
+    Requires Accessibility permission for whatever runs osascript (grant once in
+    System Settings > Privacy & Security > Accessibility).  If that is not
+    granted, or there is only one window, this silently no-ops and the PDFs stay
+    as separate windows (or tabs, per the system 'Prefer tabs' setting).
+    """
+    if sys.platform != "darwin":
+        return
+    script = ('tell application "Preview" to activate\n'
+              'tell application "System Events" to tell process "Preview"\n'
+              '  try\n'
+              '    click menu item "Merge All Windows" of menu "Window" of menu bar 1\n'
+              '  end try\n'
+              'end tell')
+    try:
+        subprocess.run(["osascript", "-e", script],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def open_best_pdfs(args: argparse.Namespace, ranked: list, opened: set) -> None:
+    """Open the equity-curve PDF for the best qualifying runs in Preview.
+
+    `ranked` is the best-first list of hits; each hit's run folder is its params
+    string (the rightmost column of this monitor's output / the param-study
+    subdir name).  A run is opened only if it has a hit with p-value below
+    --open-pval-max.  Each PDF is passed as a two-component relative path
+    (``<run-folder>/gainsOverTimeCumulative.pdf``) run from --dir, so Preview's
+    title carries the folder, letting you tell which run each graph came from.
+    A PDF already open in Preview, or already opened this session, is skipped.
+    All new PDFs are opened in a single `open` call and (unless --no-tabbed) then
+    merged into tabs of one window.
+    """
+    if not args.open_pdfs:
+        return
+
+    # distinct qualifying run folders, best-first
+    folders: list = []
+    for (_path, _n), (_sortino, pval, _raw, params) in ranked:
+        if pval < args.open_pval_max and params not in folders:
+            folders.append(params)
+    if args.open_max > 0:
+        folders = folders[:args.open_max]
+
+    already = preview_open_paths()
+    to_open: list = []   # (folder, two-component relative pdf path)
+    for folder in folders:
+        if folder in opened:
+            continue
+        rel_pdf = os.path.join(folder, PDF_NAME)   # two components, relative to --dir
+        abs_pdf = os.path.realpath(os.path.join(args.dir, rel_pdf))
+        if not os.path.isfile(abs_pdf):
+            print(f"    (no {PDF_NAME} in {folder})", flush=True)
+            continue
+        if abs_pdf in already:
+            opened.add(folder)                     # already up in Preview; leave it
+            continue
+        to_open.append((folder, rel_pdf))
+
+    if not to_open:
+        return
+
+    # open them all at once so they arrive together (and tab cleanly)
+    try:
+        subprocess.Popen(["open"] + [rel for _folder, rel in to_open], cwd=args.dir)
+    except OSError as e:
+        print(f"    warning: could not open PDFs: {e}", flush=True)
+        return
+    for folder, rel in to_open:
+        opened.add(folder)
+        print(f"    opened {rel}", flush=True)
+
+    if args.tabbed:
+        # let Preview create the windows before asking it to merge them to tabs
+        time.sleep(1.5)
+        merge_preview_windows_into_tabs()
+
+
+def scan_once(args: argparse.Namespace, found: dict, timing: dict, opened: set) -> None:
     """One pass: read every matching status file, refresh the accumulated set of
     interesting hits, then dump the whole set (best-first) so the current leaders
     are always visible without scrolling back.
@@ -175,6 +314,10 @@ def scan_once(args: argparse.Namespace, found: dict, timing: dict) -> None:
     # dump everything found so far, most interesting first (highest sortino,
     # then lowest p-value)
     ranked = sorted(found.items(), key=lambda kv: (-kv[1][0], kv[1][1]))
+
+    # optionally pop open the equity-curve PDFs for the best qualifying runs
+    open_best_pdfs(args, ranked, opened)
+
     lines = []
     for rank, ((_path, n), (sortino, pval, raw, params)) in enumerate(ranked, 1):
         raw_str = "     n/a" if raw is None else f"{raw:+.4f}"
@@ -203,9 +346,10 @@ def main() -> None:
           f"every {args.interval}s (Ctrl-C to stop) ===", flush=True)
     seen: dict = {}
     timing: dict = {"known": set(), "last": None, "deltas": []}
+    opened: set = set()   # run folders whose PDF we have already opened this session
     try:
         while True:
-            scan_once(args, seen, timing)
+            scan_once(args, seen, timing, opened)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print("\n=== monitor stopped ===", flush=True)
