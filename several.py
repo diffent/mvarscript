@@ -3465,6 +3465,16 @@ for forecastrow in range(startrow,ntrials+1):
 
       legend(loc='upper left', borderaxespad=0, prop={'size': 6})
 
+      # stamp the run folder name across the top of the plot (~10 px top margin)
+      # so the saved PDF is self-identifying (e.g. when several are open at once
+      # in Preview, whose window title is only the shared file name).  several.py
+      # runs with its working directory set to the run's output folder.
+      _stampFolder = os.path.basename(os.getcwd())
+      _stampYtop = 1.0 - 10.0 / (fig.get_figheight() * fig.dpi)  # ~10 px from top
+      _stampXleft = 10.0 / (fig.get_figwidth() * fig.dpi)        # ~10 px from left
+      fig.text(_stampXleft, _stampYtop, _stampFolder,
+               ha='left', va='top', fontsize=5, color='black')
+
       fig.savefig('gainsOverTimeCumulative.pdf')
 
       print("ztolCumulative3Plot", ztolCumulative3Plot)
