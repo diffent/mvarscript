@@ -118,10 +118,10 @@ RUN_METHOD = "optimize"
 # adjustedSortino1
 OPT_TARGET = "adjustedSortino1"       # top-level status-JSON key to MAXIMIZE;
                                       # any numeric key works (e.g. sortino2)
-OPT_MAX_RUNS = 100                    # number of Optuna trials (== run-defaults runs)
-OPT_WINDOWSIZE_RANGE = (50, 200)      # (min, max) inclusive search range
-OPT_NEIGHBORS_RANGE = (2, 190)        # (min, max) inclusive search range
-OPT_KNNVARCUTOFF_RANGE = (50, 900)    # (min, max) inclusive search range; integer >= 0
+OPT_MAX_RUNS = 150                    # number of Optuna trials (== run-defaults runs)
+OPT_WINDOWSIZE_RANGE = (20, 200)      # (min, max) inclusive search range
+OPT_NEIGHBORS_RANGE = (2, 2)          # (min, max) inclusive search range
+OPT_KNNVARCUTOFF_RANGE = (50, 950)    # (min, max) inclusive search range; integer >= 0
 OPT_ANNEALMAXITER_RANGE = (1, 1000)    # (min, max) inclusive search range; integer >= 1
 OPT_ELASTICALPHA_RANGE = (1e-6, 1.0)  # (min, max) inclusive search range; float > 0, searched log-scale
                                       # low floor 1e-6 so the log search covers very small (near-zero)
@@ -130,7 +130,7 @@ OPT_ELASTICALPHA_RANGE = (1e-6, 1.0)  # (min, max) inclusive search range; float
 OPT_WINDOWSIZE_STEP = 10              # search windowsize on this integer grid step (must be >= 1)
 OPT_NEIGHBORS_STEP = 3                # search neighbors on this integer grid step (must be >= 1)
 OPT_KNNVARCUTOFF_STEP = 10            # search knnvarcutoff on this integer grid step (must be >= 1)
-OPT_ANNEALMAXITER_STEP = 10           # search annealmaxiter on this integer grid step (must be >= 1)
+OPT_ANNEALMAXITER_STEP = 50           # search annealmaxiter on this integer grid step (must be >= 1)
 # elasticalpha is searched on a continuous log scale (no step): penalty strength
 # spans orders of magnitude, so log-uniform proposals explore it far better.
 OPT_SEED = 42                         # RNG seed for reproducible trial suggestions
