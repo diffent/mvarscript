@@ -3448,35 +3448,6 @@ for forecastrow in range(startrow,ntrials+1):
         ztolCumulative3Plot.append(initialInvestment + ztolGain3Plot[1][xd])
         buyAndHoldCumulativePlot.append(initialInvestment + buyAndHoldGainPlot[1][xd])
 
-      fig = plt.figure()
-
-      # need buy n hold (?)
-      # x axis as dates?
-
-      plot(buyAndHoldCumulativePlot, 'k', label='buy & hold approx')
-      plot(ztolCumulative1Plot, 'r', label='model 1')
-      plot(ztolCumulative2Plot, 'g', label='model 2') 
-      plot(ztolCumulative3Plot, 'b', label='model 3')
-
-      plt.title("backtest of a simple trading system based on the 3 models")
-
-      xlabel("forward in time to the right (days)")
-      ylabel("dollars")
-
-      legend(loc='upper left', borderaxespad=0, prop={'size': 6})
-
-      # stamp the run folder name across the top of the plot (~10 px top margin)
-      # so the saved PDF is self-identifying (e.g. when several are open at once
-      # in Preview, whose window title is only the shared file name).  several.py
-      # runs with its working directory set to the run's output folder.
-      _stampFolder = os.path.basename(os.getcwd())
-      _stampYtop = 1.0 - 10.0 / (fig.get_figheight() * fig.dpi)  # ~10 px from top
-      _stampXleft = 10.0 / (fig.get_figwidth() * fig.dpi)        # ~10 px from left
-      fig.text(_stampXleft, _stampYtop, _stampFolder,
-               ha='left', va='top', fontsize=5, color='black')
-
-      fig.savefig('gainsOverTimeCumulative.pdf')
-
       print("ztolCumulative3Plot", ztolCumulative3Plot)
 
       percentDiffArray1 = []
@@ -3612,7 +3583,45 @@ for forecastrow in range(startrow,ntrials+1):
       print("sharpe3", sharpe3)
       print("sortino3",sortino3)
       print("sortino3p", sortino3p)
- 
+
+      # --- cumulative equity-curve plot ---
+      # Drawn here (rather than right after the equity arrays are built) so the
+      # legend can show each model's computed metrics: so=sortino, bestpval=the
+      # z-toleranced p-value (bestM*pval), rtn=raw total return (percentDiff*).
+      # The buy & hold curve is left plain -- we don't compute these for it yet.
+      fig = plt.figure()
+
+      # need buy n hold (?)
+      # x axis as dates?
+
+      _lblM1 = 'model 1 so=%.3f bestpval=%.4f rtn=%.4f' % (sortino1, bestM1pval, percentDiff1)
+      _lblM2 = 'model 2 so=%.3f bestpval=%.4f rtn=%.4f' % (sortino2, bestM2pval, percentDiff2)
+      _lblM3 = 'model 3 so=%.3f bestpval=%.4f rtn=%.4f' % (sortino3, bestM3pval, percentDiff3)
+
+      plot(buyAndHoldCumulativePlot, 'k', label='buy & hold approx')
+      plot(ztolCumulative1Plot, 'r', label=_lblM1)
+      plot(ztolCumulative2Plot, 'g', label=_lblM2)
+      plot(ztolCumulative3Plot, 'b', label=_lblM3)
+
+      plt.title("backtest of a simple trading system based on the 3 models")
+
+      xlabel("forward in time to the right (days)")
+      ylabel("dollars")
+
+      legend(loc='upper left', borderaxespad=0, prop={'size': 6})
+
+      # stamp the run folder name across the top of the plot (~10 px top margin)
+      # so the saved PDF is self-identifying (e.g. when several are open at once
+      # in Preview, whose window title is only the shared file name).  several.py
+      # runs with its working directory set to the run's output folder.
+      _stampFolder = os.path.basename(os.getcwd())
+      _stampYtop = 1.0 - 10.0 / (fig.get_figheight() * fig.dpi)  # ~10 px from top
+      _stampXleft = 10.0 / (fig.get_figwidth() * fig.dpi)        # ~10 px from left
+      fig.text(_stampXleft, _stampYtop, _stampFolder,
+               ha='left', va='top', fontsize=5, color='black')
+
+      fig.savefig('gainsOverTimeCumulative.pdf')
+
       # here is the new stuff, we want the bad forecasts
 
       diffSignM1 = numpy.sign(backtestActual) != numpy.sign(backtestForecastM1)
