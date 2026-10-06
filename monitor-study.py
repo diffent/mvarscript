@@ -25,7 +25,7 @@ This script only READS status files -- it never writes or edits anything, so it
 is safe to run alongside a live study.
 
 Usage:
-    python3 monitor-study.py                     # defaults, scan this script's dir
+    python3 monitor-study.py                     # defaults, scan the current directory
     python3 monitor-study.py --dir /path/to/runs
     python3 monitor-study.py --sortino-min 0.4 --pval-max 0.05 --interval 2
     python3 monitor-study.py --glob 'status.symbols=*'
@@ -53,8 +53,10 @@ MODELS = (1, 2, 3)
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Live monitor for a running study.")
-    p.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)),
-                   help="directory holding the status files (default: this script's dir)")
+    p.add_argument("--dir", default=os.getcwd(),
+                   help="directory holding the status files (default: the current "
+                        "working directory, so running it from inside a run/archive "
+                        "dir scans that dir)")
     p.add_argument("--glob", default=STATUS_GLOB,
                    help=f"glob for status files (default: {STATUS_GLOB!r})")
     p.add_argument("--sortino-min", type=float, default=SORTINO_MIN,
