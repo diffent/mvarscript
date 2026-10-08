@@ -108,7 +108,7 @@ run_solver() {
     annealMaxiter="${ANNEALMAXITER:-100}" `# dual_annealing max global iterations (param study sets ANNEALMAXITER; several.py's option is camelCase annealMaxiter, default 100)` \
     shareCount=30.0 \
     costPerTrade=5.0 \
-    daysWithheld=0 \
+    daysWithheld="${DAYSWITHHELD:-0}" `# drop this many most-recent days from the data (several.py option daysWithheld); overridable via the DAYSWITHHELD env var` \
     allowShorting=1 \
     riskFreeRate=4.0 \
     normalize=1 \

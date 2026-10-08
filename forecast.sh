@@ -36,6 +36,7 @@ export NEIGHBORS="${NEIGHBORS:-2}"
 export KNNVARCUTOFF="${KNNVARCUTOFF:-780}"
 export ELASTICALPHA="${ELASTICALPHA:-0.01}"      # ElasticNet penalty strength (only used when sublinearType=ElasticNet)
 export ANNEALMAXITER="${ANNEALMAXITER:-801}"     # dual_annealing max global iterations for the model-1 solve
+export DAYSWITHHELD="${DAYSWITHHELD:-0}"          # drop this many most-recent days from the data (several.py daysWithheld)
 
 # symbols to forecast (first symbol is the forecast target); run-defaults.sh
 # defaults these if unset, but set them here for a self-contained forecast.
@@ -45,7 +46,7 @@ export SYMBOLS="${SYMBOLS:-AMD NVDA}"
 export REUSEMERGEDRAW=0   # always pull fresh data for a real forecast
 export DO_FORECAST=1      # enable run-defaults.sh's phase-2 forecast (ntrials=-1)
 
-echo "=== forecast: SYMBOLS='$SYMBOLS' windowsize=$WINDOWSIZE neighbors=$NEIGHBORS knnvarcutoff=$KNNVARCUTOFF elasticalpha=$ELASTICALPHA annealmaxiter=$ANNEALMAXITER ==="
+echo "=== forecast: SYMBOLS='$SYMBOLS' windowsize=$WINDOWSIZE neighbors=$NEIGHBORS knnvarcutoff=$KNNVARCUTOFF elasticalpha=$ELASTICALPHA annealmaxiter=$ANNEALMAXITER daysWithheld=$DAYSWITHHELD ==="
 echo "=== fresh data pull (reuseMergedRaw=0), phase-2 forecast enabled (ntrials=-1) ==="
 
 # where run-defaults.sh writes its output; mirror its own OUTDIR default so we
