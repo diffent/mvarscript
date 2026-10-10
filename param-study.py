@@ -29,6 +29,7 @@ Sharpe extraction) and emit the same date/time-stamped results table.
 This is a Python port of param-study-windowsize.sh; both are kept.
 """
 
+import csv
 import itertools
 import json
 import os
@@ -42,6 +43,7 @@ from pathlib import Path
 # run relative to this script so subdirs / run-defaults.sh land in the right place
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUN_SCRIPT = SCRIPT_DIR / "run-defaults.sh"
+PLOT_SCRIPT = SCRIPT_DIR / "plot-convergence.py"  # renders the objective CSV to a convergence PDF
 
 # Symbols for this study, passed straight through to run-defaults.sh via the
 # SYMBOLS env var (set by symbol-study.py).  When set, every per-run output
@@ -122,7 +124,7 @@ OPT_MAX_RUNS = 150                    # number of Optuna trials (== run-defaults
 OPT_WINDOWSIZE_RANGE = (20, 200)      # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (2, 2)          # (min, max) inclusive search range
 OPT_KNNVARCUTOFF_RANGE = (50, 950)    # (min, max) inclusive search range; integer >= 0
-OPT_ANNEALMAXITER_RANGE = (1, 1000)    # (min, max) inclusive search range; integer >= 1
+OPT_ANNEALMAXITER_RANGE = (1, 25)    # (min, max) inclusive search range; integer >= 1
 OPT_ELASTICALPHA_RANGE = (1e-6, 1.0)  # (min, max) inclusive search range; float > 0, searched log-scale
                                       # low floor 1e-6 so the log search covers very small (near-zero)
                                       # alphas, where weak predictors survive; log-uniform gives each
@@ -348,6 +350,45 @@ def format_table(results: list[RunResult], timestamp: str) -> str:
     return "\n".join(out) + "\n"
 
 
+def write_objective_csv(results: list[RunResult], csv_path: Path) -> None:
+    """Write one objective value per hyperparameter combination, for plotting.
+
+    Rows are in evaluation order (the order run_grid / run_optimize produced
+    them), so the `run` index column is a natural time axis for a convergence
+    plot: plot `objective` to see per-run noise and `best_so_far` (the running
+    maximum of the objective over all runs up to and including this one) to see
+    whether the search has converged -- a `best_so_far` that stops improving
+    over the last many runs is the signal that it has.
+
+    ERROR/failed runs are written with an empty `objective` and carry the prior
+    `best_so_far` forward unchanged (a failed run can't be a new best), so they
+    don't corrupt the convergence curve.  Columns after the objective are the
+    parameters and all metric columns, mirroring the text table.
+    """
+    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET]))
+    symbols_cell = "_".join(SYMBOLS.split()) if SYMBOLS else ""
+    header = (["run", "objective", "best_so_far", "windowsize", "neighbors",
+               "knnvarcutoff", "annealmaxiter", "elasticalpha"]
+              + metric_keys + ["symbols", "rundir"])
+
+    best: float | None = None
+    with open(csv_path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for i, r in enumerate(results, start=1):
+            obj = r.target if isinstance(r.target, (int, float)) else None
+            if obj is not None:
+                best = obj if best is None else max(best, obj)
+            w.writerow(
+                [i,
+                 "" if obj is None else repr(obj),
+                 "" if best is None else repr(best),
+                 r.windowsize, r.neighbors, r.knnvarcutoff, r.annealmaxiter,
+                 _fmt_alpha(r.elasticalpha)]
+                + [_fmt_metric(r.metrics.get(k, "ERROR")) for k in metric_keys]
+                + [symbols_cell, r.rundir])
+
+
 def numeric_target(result: RunResult, penalty: float) -> float:
     """The run's objective value as a float; failed/ERROR runs map to `penalty`."""
     return float(result.target) if isinstance(result.target, (int, float)) else penalty
@@ -497,10 +538,30 @@ def main() -> None:
     table = format_table(results, timestamp)
     table_file.write_text(table)
 
+    # plottable objective time series: one objective value per hyperparameter
+    # combination, in run order, with a running best_so_far for the convergence
+    # check (does best_so_far flatten out over the last runs?).
+    csv_file = SCRIPT_DIR / _run_tag(f"objective.{timestamp}.csv")
+    write_objective_csv(results, csv_file)
+
     print(f"\n=== results: params vs sharpe1/sharpe2/sharpe3 "
           f"(objective: target={OPT_TARGET}) ===")
     print(table, end="")
     print(f"=== results table written to {table_file} ===")
+    print(f"=== objective time series (for convergence plot) written to "
+          f"{csv_file} ===")
+
+    # render the convergence PDF from that CSV via plot-convergence.py (shares
+    # one plotting implementation).  Guarded: a plotting failure (e.g. matplotlib
+    # missing) must not lose the study's results, which are already on disk above.
+    plot_file = csv_file.with_suffix(".pdf")
+    try:
+        subprocess.run([sys.executable, str(PLOT_SCRIPT), str(csv_file),
+                        str(plot_file)], cwd=SCRIPT_DIR, check=True)
+        print(f"=== convergence plot written to {plot_file} ===")
+    except (OSError, subprocess.CalledProcessError) as e:
+        print(f"warning: convergence plot failed ({e}); CSV is at {csv_file}",
+              file=sys.stderr)
 
 
 if __name__ == "__main__":

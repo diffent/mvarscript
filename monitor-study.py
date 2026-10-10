@@ -44,7 +44,7 @@ import time
 from datetime import datetime
 
 # defaults (all overridable on the command line)
-POLL_SECONDS = 5.0            # seconds between scans
+POLL_SECONDS = 10.0            # seconds between scans
 SORTINO_MIN = 0.30            # a sortino ratio at or above this is "high"
 PVAL_MAX = 0.10               # a p-value at or below this is "low"
 STATUS_GLOB = "status.symbols=*"   # only the param-tagged status copies
