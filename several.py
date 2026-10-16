@@ -249,6 +249,9 @@ annealMaxiter=100 # set small when we don't care about this model, for speed
 
 diffvol=1 # 0 do not daily difference the volatility, 1 daily difference the volatility
 
+stationaritystudy=True # True: run ADF/KPSS stationarity tests on every column of the
+                       # lagged + daily-differenced regression table; False: skip
+
 normalize=0
 
 print((sys.version))
@@ -1293,6 +1296,87 @@ for thelist in regtable:
   wr.writerow(thelist)
 
 myfile.close()
+
+# stationarity study on every column of the lagged + daily-differenced table.
+# regtable here has no header; column 0 is the text date, columns 1..ncolsrt-1
+# are numeric. Column names come from the Levels header regtableL[0].
+if stationaritystudy:
+  from statsmodels.tsa.stattools import adfuller, kpss
+  import warnings
+
+  print("")
+  print("==== stationarity study (lagged + daily-differenced columns) ====")
+  print("ADF  H0: unit root (non-stationary) -> small p rejects -> stationary")
+  print("KPSS H0: stationary                 -> small p rejects -> non-stationary")
+  print("%-18s %8s %10s %10s %10s %-16s" %
+        ("column", "n", "ADF_stat", "ADF_p", "KPSS_p", "verdict"))
+
+  header = regtableL[0]
+  stationarityresults = []
+
+  for j in range(1, len(regtable[0])):
+    colname = header[j] if j < len(header) else ("col%d" % j)
+
+    # pull the column, dropping any non-finite values
+    series = []
+    for row in regtable:
+      try:
+        val = float(row[j])
+      except (TypeError, ValueError):
+        continue
+      if math.isfinite(val):
+        series.append(val)
+
+    arr = numpy.array(series, dtype=float)
+
+    if len(arr) < 10 or numpy.allclose(arr, arr[0]):
+      # too short or constant: tests are undefined
+      print("%-18s %8d %10s %10s %10s %-16s" %
+            (colname, len(arr), "NA", "NA", "NA", "const/too-short"))
+      stationarityresults.append({"column": colname, "n": len(arr),
+                                   "adf_stat": None, "adf_p": None,
+                                   "kpss_p": None, "verdict": "const/too-short"})
+      continue
+
+    try:
+      adf_stat, adf_p = adfuller(arr, autolag="AIC")[:2]
+    except Exception as e:
+      adf_stat, adf_p = float("nan"), float("nan")
+      print("  adfuller failed for %s: %s" % (colname, e))
+
+    try:
+      with warnings.catch_warnings():
+        # KPSS warns when the p-value is outside the interpolation table
+        warnings.simplefilter("ignore")
+        kpss_p = kpss(arr, regression="c", nlags="auto")[1]
+    except Exception as e:
+      kpss_p = float("nan")
+      print("  kpss failed for %s: %s" % (colname, e))
+
+    # combined verdict: ADF rejects unit root AND KPSS fails to reject stationary
+    adf_stationary = adf_p < 0.05
+    kpss_stationary = kpss_p > 0.05
+    if adf_stationary and kpss_stationary:
+      verdict = "stationary"
+    elif (not adf_stationary) and (not kpss_stationary):
+      verdict = "non-stationary"
+    else:
+      verdict = "inconclusive"
+
+    print("%-18s %8d %10.3f %10.4f %10.4f %-16s" %
+          (colname, len(arr), adf_stat, adf_p, kpss_p, verdict))
+    stationarityresults.append({"column": colname, "n": len(arr),
+                                 "adf_stat": adf_stat, "adf_p": adf_p,
+                                 "kpss_p": kpss_p, "verdict": verdict})
+
+  print("==== end stationarity study ====")
+  print("")
+
+  # keep results in the json output if jout is available
+  try:
+    jout["stationarity"] = stationarityresults
+  except NameError:
+    pass
 
 # now write full table with open columns
 myfile = open("regtableDiffo.csv", 'w')
