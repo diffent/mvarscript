@@ -44,6 +44,12 @@ PARAM_STUDY = SCRIPT_DIR / "param-study.py"
 # the load of several concurrent data pulls.
 MAX_PARALLEL = 4
 
+# drop this many most-recent days from the data before fitting (several.py's
+# daysWithheld).  Applies uniformly to every selection and every param-study
+# trial.  Flows through param-study.py into run-defaults.sh via the DAYSWITHHELD
+# env var; set that var to override this default without editing the file.
+DAYSWITHHELD = int(os.environ.get("DAYSWITHHELD", "0"))
+
 # starting universe of symbols to study
 SYMBOL_POOL = [
     "NVDA", "AAPL", "GOOG", "MSFT", "AMZN",
@@ -188,8 +194,9 @@ def run_combo(index: int, total: int, combo: tuple[str, ...]) -> tuple[str, int]
     print(f"### [{index}/{total}] START  SYMBOLS = {symbols}  (log: {log_path.name})")
 
     # SYMBOLS flows through param-study.py into run-defaults.sh, and also drives
-    # the output-name tagging in param-study.py.
-    env = os.environ | {"SYMBOLS": symbols}
+    # the output-name tagging in param-study.py.  DAYSWITHHELD likewise passes
+    # straight through to several.py.
+    env = os.environ | {"SYMBOLS": symbols, "DAYSWITHHELD": str(DAYSWITHHELD)}
     with open(log_path, "w") as log:
         proc = subprocess.run([sys.executable, str(PARAM_STUDY)],
                               cwd=SCRIPT_DIR, env=env,
@@ -218,7 +225,7 @@ def main() -> None:
         mode = "ordered"
     total = len(combos)
     print(f"=== symbol study ({mode}): {total} selections, "
-          f"up to {MAX_PARALLEL} at once ===")
+          f"up to {MAX_PARALLEL} at once, daysWithheld={DAYSWITHHELD} ===")
 
     # Each selection is independent (own SYMBOLS-tagged subdirs / cache), so run
     # them through a thread pool; subprocess.run releases the GIL while the child
