@@ -1412,11 +1412,10 @@ print("futureX with volatility data")
 
 # generalized to nlags. each symbol block in regtableo is width 2*nlags+3
 # (c0, close1..closeN, open0, open1..openN, vol); k points at c0 (at the shared
-# "close" column for the first symbol). the forecast-day close lags shift by one:
-# close1' = today's close, close2' = close1, ... = regtableo[0][k .. k+nlags-1].
-# NOTE legacy quirk preserved: the open loop pulls nlags+1 values (o0..oN) and the
-# last one (oN) lands in the volatility slot instead of the real vol column. This
-# is an off-by-one in the forward-forecast row only; see note after this block.
+# "close" column for the first symbol). the forecast-day lags all shift by one:
+# close1' = today's close, close2' = close1, ... = regtableo[0][k .. k+nlags-1];
+# open1'  = today's open,  open2'  = open1,  ... = regtableo[0][k+nlags+1 .. k+2*nlags];
+# vol'    = today's volatility                   = regtableo[0][k+2*nlags+2].
 symblockwidth = 2*nlags + 3
 
 for symbol in symbols:
@@ -1424,8 +1423,10 @@ for symbol in symbols:
  for off in range(0, nlags):             # close1'..closeN' from today's close + close1..close(N-1)
    futureX = futureX + [regtableo[0][k + off]]
 
- for off in range(0, nlags + 1):         # open1'..openN' (+ trailing oN into vol slot, legacy quirk)
+ for off in range(0, nlags):             # open1'..openN' from today's open + open1..open(N-1)
    futureX = futureX + [regtableo[0][k + nlags + 1 + off]]
+
+ futureX = futureX + [regtableo[0][k + 2*nlags + 2]]  # vol' = today's volatility (real vol column)
 
  k = k + symblockwidth
 
