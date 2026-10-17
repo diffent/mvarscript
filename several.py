@@ -182,8 +182,10 @@ uselars = False # uselogit should be zero also
 
 useopen = True 
 
-windowsize = 200 
-ntrials = 9 # will run 1 more since starts at zero 
+windowsize = 200
+nlags = 2 # number of lags per symbol for close and open (symmetric). 2 reproduces the
+          # legacy layout: close1..closeN, open1..openN. override on cmd line as nlags=4
+ntrials = 9 # will run 1 more since starts at zero
 neighbors = 20
 coolrate = 0 # model 1 solver: 0 fast anneal (dwell=1), 1 slow anneal, 2 slow anneal (output labeled BFGS), 3 force BFGS no anneal; anneal only on legacy py2.7.3 scipy else BFGS
 noboot=1 # if 1 skip boot run nominal
@@ -308,6 +310,7 @@ if nargs < 2:
   print("option:  useopen=[1|0]") 
   print("option:  coolrate=0 model 1 solver schedule: 0=fast anneal (dwell=1), 1=slow anneal (default dwell), 2=slow anneal (output labeled BFGS), 3=force BFGS optimizer no anneal; simulated annealing only runs on legacy py2.7.3 scipy, on modern python all values use BFGS")
   print("option:  windowsize=200 points to include in regression")
+  print("option:  nlags=2 number of close and open lags per symbol (symmetric); 2 = legacy layout")
   print("option:  ntrials=9 number of back test days minus one (loop starts at 0, so it runs ntrials+1 days; default 9 runs 10 days)")
   print("option:  neighbors=20 number of points in knearest calc if used")  
   print("option:  epsilon1000=2000 multiquadric param x 1000")
@@ -974,27 +977,26 @@ firstsym = 1
 for symbol in symbols:
   print(symbol)
   txt0 = symbol + "close"  # not used for first symbol ... not used in ordinary regression table either
-  txtA = symbol + "close1"
-  txtB = symbol + "close2"
-  txtC = symbol + "open"
-  txtD = symbol + "open1"
-  txtE = symbol + "open2"
+  txtC = symbol + "open"   # o0, today's open
   txtF = symbol + "close1vol"
-  headerline.append(txtA)
-  headerline.append(txtB)
+
+  # close lags close1..closeN
+  for lag in range(1, nlags + 1):
+    headerline.append(symbol + "close" + str(lag))
   if useopen:
     headerline.append(txtC)
-  headerline.append(txtD)
-  headerline.append(txtE)
+  # open lags open1..openN
+  for lag in range(1, nlags + 1):
+    headerline.append(symbol + "open" + str(lag))
   headerline.append(txtF)
 
   if firstsym == 0:
     headerlineo.append(txt0) # including todays close price for later future calculation
-  headerlineo.append(txtA)   # including todays open price
-  headerlineo.append(txtB)
+  for lag in range(1, nlags + 1):
+    headerlineo.append(symbol + "close" + str(lag))   # including todays open price
   headerlineo.append(txtC)
-  headerlineo.append(txtD)
-  headerlineo.append(txtE)
+  for lag in range(1, nlags + 1):
+    headerlineo.append(symbol + "open" + str(lag))
   headerlineo.append(txtF)
   firstsym = 0
 
@@ -1032,7 +1034,7 @@ print("creating regression table")
 donotdifference  = [] # column number, we may not want to difference volatility
 donotdifferenceo = [] # for reglineo column counts
 
-for i in range(1, len(mergedraw) - 2):
+for i in range(1, len(mergedraw) - nlags):
   regline = [mergedraw[i][thedate]]
   reglineo = [mergedraw[i][thedate]] # with open prices (current day) ... needed for future forecast
  
@@ -1061,26 +1063,23 @@ for i in range(1, len(mergedraw) - 2):
       c0 = float(mergedraw[i][closeidx]) # for reglineo only ... need current day's close price
     except:
       c0 = 0
-    try:
-      c1 = float(mergedraw[i+1][closeidx])
-    except:
-      c1 = 0
-    try:
-      c2 = float(mergedraw[i+2][closeidx])
-    except:
-      c2 = 0
+    # close lags close1..closeN and open lags open1..openN (symmetric, nlags each)
+    clags = []
+    for lag in range(1, nlags + 1):
+      try:
+        clags.append(float(mergedraw[i+lag][closeidx]))
+      except:
+        clags.append(0)
     try:
       o0 = float(mergedraw[i][openidx])
     except:
-      o0 = 0 
-    try:
-      o1 = float(mergedraw[i+1][openidx])
-    except:
-      o1 = 0
-    try:
-      o2 = float(mergedraw[i+2][openidx])
-    except:
-      o2 = 0
+      o0 = 0
+    olags = []
+    for lag in range(1, nlags + 1):
+      try:
+        olags.append(float(mergedraw[i+lag][openidx]))
+      except:
+        olags.append(0)
 
     v1 = float(mergedraw[i+1][closeidx]) # placeholder for volatility 1 day lagged but this is price 1 d lag
 
@@ -1118,12 +1117,12 @@ for i in range(1, len(mergedraw) - 2):
 
     v1 = thestdev # later we want to not difference this further, or...do we?   can leave it or not, we shall see
              
-    regline.append(c1)
-    regline.append(c2)
+    for cv in clags:
+      regline.append(cv)
     if useopen:
       regline.append(o0)
-    regline.append(o1)  
-    regline.append(o2)
+    for ov in olags:
+      regline.append(ov)
     regline.append(v1) # vol placeholder ... now actual volatility
 
     if i == 1: # first time only 
@@ -1136,11 +1135,11 @@ for i in range(1, len(mergedraw) - 2):
 
     if firstsym == 0:
       reglineo.append(c0) # add todays closing for all dependent symbols
-    reglineo.append(c1)
-    reglineo.append(c2)
+    for cv in clags:
+      reglineo.append(cv)
     reglineo.append(o0)
-    reglineo.append(o1)
-    reglineo.append(o2)
+    for ov in olags:
+      reglineo.append(ov)
     reglineo.append(v1) # vol placeholder
 
     if i == 1: # first time only 
@@ -1411,19 +1410,24 @@ k = 2 # this is the first close column in the full "with opens" regression table
 
 print("futureX with volatility data")
 
+# generalized to nlags. each symbol block in regtableo is width 2*nlags+3
+# (c0, close1..closeN, open0, open1..openN, vol); k points at c0 (at the shared
+# "close" column for the first symbol). the forecast-day close lags shift by one:
+# close1' = today's close, close2' = close1, ... = regtableo[0][k .. k+nlags-1].
+# NOTE legacy quirk preserved: the open loop pulls nlags+1 values (o0..oN) and the
+# last one (oN) lands in the volatility slot instead of the real vol column. This
+# is an off-by-one in the forward-forecast row only; see note after this block.
+symblockwidth = 2*nlags + 3
+
 for symbol in symbols:
 
- futureX = futureX + [regtableo[0][k]]   # now close1
- futureX = futureX + [regtableo[0][k+1]] # now close2 ... skip close2 or it will be close3
+ for off in range(0, nlags):             # close1'..closeN' from today's close + close1..close(N-1)
+   futureX = futureX + [regtableo[0][k + off]]
 
- futureX = futureX + [regtableo[0][k+3]] # now open1
- futureX = futureX + [regtableo[0][k+4]] # now open2 ... ah, now we are missing close1 which was close before for the next symbol
-                                         # now regtableo should have the close values in the proper spot
+ for off in range(0, nlags + 1):         # open1'..openN' (+ trailing oN into vol slot, legacy quirk)
+   futureX = futureX + [regtableo[0][k + nlags + 1 + off]]
 
- futureX = futureX + [regtableo[0][k+5]] # v1:  now vol (of close) 1
-
- # orig way w/o volatility k = k + 6
- k = k + 7 # 1 more variable v1 ... need to check this
+ k = k + symblockwidth
 
 futureXfull = futureX
 
@@ -3299,11 +3303,15 @@ for forecastrow in range(startrow,ntrials+1):
       print("close before backtest", regtableWithBacktests[oneIndexOlderThanBacktest][0], regtableWithBacktests[oneIndexOlderThanBacktest][2])
       print("close most recent    ", regtableWithBacktests[1][0], regtableWithBacktests[1][2])
 
-      print("open on backtest start day", regtableWithBacktests[oneIndexNewerThanBacktest][0], regtableWithBacktests[oneIndexNewerThanBacktest][5]) 
+      # the day's-open column for the first symbol sits right after the nlags close
+      # lags: date,c-o,close,close1..closeN, open0 -> index 3+nlags (==5 when nlags=2)
+      firstSymbolOpenCol = 3 + nlags
+
+      print("open on backtest start day", regtableWithBacktests[oneIndexNewerThanBacktest][0], regtableWithBacktests[oneIndexNewerThanBacktest][firstSymbolOpenCol])
 
       backtestStartDay = "one trading day before " + str(regtableWithBacktests[oneIndexNewerThanBacktest][0])
 
-      openOnBacktestStartDay = regtableWithBacktests[oneIndexNewerThanBacktest][5] # this pulls open1 = open lag 1
+      openOnBacktestStartDay = regtableWithBacktests[oneIndexNewerThanBacktest][firstSymbolOpenCol] # day's own open (open0)
 
       initialInvestment = shareCount*openOnBacktestStartDay + costPerTrade # this has to be plus since you have that penalty
 
