@@ -93,6 +93,7 @@ run_solver() {
     ntrials="$ntrials_arg" \
     coolrate=0 \
     windowsize="${WINDOWSIZE:-200}" \
+    nlags="${NLAGS:-5}" `# close and open lags per symbol (symmetric); 2 = legacy layout. overridable via the NLAGS env var` \
     neighbors="${NEIGHBORS:-20}" \
     knnvarcutoff="${KNNVARCUTOFF:-400}" \
     elasticalpha="${ELASTICALPHA:-0.01}" `# ElasticNet penalty strength (only used when sublinearType=ElasticNet); tuned by the param study via the ELASTICALPHA env var` \
