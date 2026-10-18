@@ -1027,6 +1027,27 @@ CLOSE_MINUS_OPEN_TARGET_COL = 1
 # see above, in original merged rows... 
 # the pattern is 1,4 = open close, the +7 for each additional symbol
 
+# trailing close volatility: stdev of day-over-day close diffs over `volen` closes
+# starting at mergedraw[startrow] and walking older (startrow+1, startrow+2, ...).
+# startrow = i+1 gives a historical row's lag-1 vol (no lookahead on day i);
+# startrow = 1 gives the forecast row's vol (window ending at the most-recent close).
+# this commonizes the identical computation formerly duplicated in the main table
+# loop and the futureX forecast-row builder.
+def trailing_close_vol(mergedraw, closeidx, startrow, volen):
+  volatilitylength = volen # really 1+ due to range logic / definition
+  if volatilitylength < 2:
+    volatilitylength = 2
+  level1data = []
+  for thislag in range(0, volatilitylength):
+    row4vol = startrow + thislag
+    if row4vol < len(mergedraw): # dont roll off the bottom of the matrix
+      level1data.append(float(mergedraw[row4vol][closeidx]))
+  # difference in place, note we go one less to avoid running past the end
+  for thislag in range(0, len(level1data)-1):
+    level1data[thislag] = level1data[thislag] - level1data[thislag+1]
+  level1data.pop() # wack the last item which is a level not a diff
+  return numpy.std(level1data)
+
 print("creating regression table")
 
 # this is for regline only not reglineo (with today's open prices in it)
@@ -1081,42 +1102,47 @@ for i in range(1, len(mergedraw) - nlags):
       except:
         olags.append(0)
 
-    v1 = float(mergedraw[i+1][closeidx]) # placeholder for volatility 1 day lagged but this is price 1 d lag
+    # vol over the window ending one day before day i (lag-1, no lookahead)
+    v1 = trailing_close_vol(mergedraw, closeidx, i+1, volen)
 
-    # actually compute vol after the differencing is done?  or what?  differencing is generic for columns so maybe do it here first
+    # orig inline computation, superseded by trailing_close_vol() above
+    if False:
+      v1 = float(mergedraw[i+1][closeidx]) # placeholder for volatility 1 day lagged but this is price 1 d lag
 
-    level1data = []
+      # actually compute vol after the differencing is done?  or what?  differencing is generic for columns so maybe do it here first
 
-    # copy as float the right number of values
+      level1data = []
 
-    # 10 day vol for now
+      # copy as float the right number of values
 
-    volatilitylength = volen # really 1+ due to range logic / definition
+      # 10 day vol for now
 
-    if volatilitylength < 2:
-      volatilitylength = 2
+      volatilitylength = volen # really 1+ due to range logic / definition
 
-    for thislag in range(0, volatilitylength):
-      row4vol = i+1+thislag 
-      if row4vol < len(mergedraw): # dont roll off the bottom of the matrix
-        lev = float(mergedraw[row4vol][closeidx]) # need to convert to float
-        level1data.append(lev)
+      if volatilitylength < 2:
+        volatilitylength = 2
 
-    # difference in place, note we go one less to avoid running past the end
-    for thislag in range(0, len(level1data)-1):
-      level1data[thislag] = level1data[thislag] - level1data[thislag+1] 
+      for thislag in range(0, volatilitylength):
+        row4vol = i+1+thislag
+        if row4vol < len(mergedraw): # dont roll off the bottom of the matrix
+          lev = float(mergedraw[row4vol][closeidx]) # need to convert to float
+          level1data.append(lev)
 
-    # wack the last item which is a level not a diff to avoid confustion 
-    level1data.pop()
+      # difference in place, note we go one less to avoid running past the end
+      for thislag in range(0, len(level1data)-1):
+        level1data[thislag] = level1data[thislag] - level1data[thislag+1]
 
-    #print "before computing stdev for vol, list is ", level1data
+      # wack the last item which is a level not a diff to avoid confustion
+      level1data.pop()
 
-    thestdev = numpy.std(level1data)
+      #print "before computing stdev for vol, list is ", level1data
 
-    #print "thestdev = ", thestdev
+      thestdev = numpy.std(level1data)
 
-    v1 = thestdev # later we want to not difference this further, or...do we?   can leave it or not, we shall see
-             
+      #print "thestdev = ", thestdev
+
+      v1 = thestdev # later we want to not difference this further, or...do we?   can leave it or not, we shall see
+
     for cv in clags:
       regline.append(cv)
     if useopen:
@@ -1431,29 +1457,34 @@ for symbol in symbols:
  for off in range(0, nlags):             # open1'..openN' from today's open + open1..open(N-1)
    futureX = futureX + [regtableo[0][k + nlags + 1 + off]]
 
- # forecast volatility: duplicated from the main-loop vol computation, with the
- # window shifted one day newer (start row 1 = most-recent close).  fvols[0] = vol
- # ending at the most-recent close (what the forecast's close1vol needs); fvols[1]
- # = vol ending one day earlier (== the most-recent row's level vol).  diffvol=1 =>
- # differenced like the stored column; diffvol=0 => level.
- volatilitylength = volen
- if volatilitylength < 2:
-   volatilitylength = 2
- fvols = []
- for startrow in (1, 2):
-   level1data = []
-   for thislag in range(0, volatilitylength):
-     row4vol = startrow + thislag
-     if row4vol < len(mergedraw):
-       level1data.append(float(mergedraw[row4vol][fcloseidx]))
-   for thislag in range(0, len(level1data)-1):
-     level1data[thislag] = level1data[thislag] - level1data[thislag+1]
-   level1data.pop()
-   fvols.append(numpy.std(level1data))
+ # forecast volatility: same computation as the main loop, window shifted one day
+ # newer.  fvols[0] = vol ending at the most-recent close (startrow 1, what the
+ # forecast's close1vol needs); fvols[1] = vol ending one day earlier (startrow 2,
+ # == the most-recent row's level vol).  diffvol=1 => differenced like the stored
+ # column; diffvol=0 => level.
+ fvols = [trailing_close_vol(mergedraw, fcloseidx, 1, volen),
+          trailing_close_vol(mergedraw, fcloseidx, 2, volen)]
  if diffvol == 0:
    futureX = futureX + [fvols[0]]
  else:
    futureX = futureX + [fvols[0] - fvols[1]]
+
+ # orig inline computation, superseded by trailing_close_vol() above
+ if False:
+   volatilitylength = volen
+   if volatilitylength < 2:
+     volatilitylength = 2
+   fvols = []
+   for startrow in (1, 2):
+     level1data = []
+     for thislag in range(0, volatilitylength):
+       row4vol = startrow + thislag
+       if row4vol < len(mergedraw):
+         level1data.append(float(mergedraw[row4vol][fcloseidx]))
+     for thislag in range(0, len(level1data)-1):
+       level1data[thislag] = level1data[thislag] - level1data[thislag+1]
+     level1data.pop()
+     fvols.append(numpy.std(level1data))
 
  k = k + symblockwidth
  fcloseidx += 6
