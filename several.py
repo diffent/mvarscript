@@ -1414,9 +1414,14 @@ print("futureX with volatility data")
 # (c0, close1..closeN, open0, open1..openN, vol); k points at c0 (at the shared
 # "close" column for the first symbol). the forecast-day lags all shift by one:
 # close1' = today's close, close2' = close1, ... = regtableo[0][k .. k+nlags-1];
-# open1'  = today's open,  open2'  = open1,  ... = regtableo[0][k+nlags+1 .. k+2*nlags];
-# vol'    = today's volatility                   = regtableo[0][k+2*nlags+2].
+# open1'  = today's open,  open2'  = open1,  ... = regtableo[0][k+nlags+1 .. k+2*nlags].
+# vol' is NOT pulled from regtableo[0] -- that cell is the lag-1 vol of the most
+# recent row, one day too old for the forecast.  it is recomputed below over the
+# window ending at the most-recent close (the i=0 case the main loop never reaches).
+# fcloseidx tracks each symbol's close column in mergedraw, mirroring the main
+# loop's closeidx (start 4, stride 6).
 symblockwidth = 2*nlags + 3
+fcloseidx = 4
 
 for symbol in symbols:
 
@@ -1426,9 +1431,32 @@ for symbol in symbols:
  for off in range(0, nlags):             # open1'..openN' from today's open + open1..open(N-1)
    futureX = futureX + [regtableo[0][k + nlags + 1 + off]]
 
- futureX = futureX + [regtableo[0][k + 2*nlags + 2]]  # vol' = today's volatility (real vol column)
+ # forecast volatility: duplicated from the main-loop vol computation, with the
+ # window shifted one day newer (start row 1 = most-recent close).  fvols[0] = vol
+ # ending at the most-recent close (what the forecast's close1vol needs); fvols[1]
+ # = vol ending one day earlier (== the most-recent row's level vol).  diffvol=1 =>
+ # differenced like the stored column; diffvol=0 => level.
+ volatilitylength = volen
+ if volatilitylength < 2:
+   volatilitylength = 2
+ fvols = []
+ for startrow in (1, 2):
+   level1data = []
+   for thislag in range(0, volatilitylength):
+     row4vol = startrow + thislag
+     if row4vol < len(mergedraw):
+       level1data.append(float(mergedraw[row4vol][fcloseidx]))
+   for thislag in range(0, len(level1data)-1):
+     level1data[thislag] = level1data[thislag] - level1data[thislag+1]
+   level1data.pop()
+   fvols.append(numpy.std(level1data))
+ if diffvol == 0:
+   futureX = futureX + [fvols[0]]
+ else:
+   futureX = futureX + [fvols[0] - fvols[1]]
 
  k = k + symblockwidth
+ fcloseidx += 6
 
 futureXfull = futureX
 
@@ -1894,7 +1922,7 @@ def theobjPreMask(varMask, A):
   # high resolution time lapse check for performance tuning
   _tlc_elapsed = time.perf_counter() - _tlc_start
   theobjPreMask_time += _tlc_elapsed
-  if objcount % 1000 == 0:
+  if False and objcount % 1000 == 0:
     print("theobjPreMask timing: calls=%d  last=%.6fms  total=%.4fs  avg=%.6fms" % (
       objcount, _tlc_elapsed * 1000.0, theobjPreMask_time, (theobjPreMask_time / objcount) * 1000.0))
 
