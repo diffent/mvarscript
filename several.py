@@ -4390,17 +4390,24 @@ if posPos1z is not None:
 
 # best pvals from quick scan of zero tolerances
 
+# multiplicative inverse of the best pvals, for use as optimization targets
+# (maximizing 1/pval == minimizing pval). guard against a zero pval with a large
+# finite sentinel (never inf, so the status JSON stays valid/parseable).
+pvalInverseCap = 1e12
 jout["bestM1pval"] = bestM1pval
+jout["bestM1pvalInverse"] = (1.0 / bestM1pval) if bestM1pval != 0 else pvalInverseCap
 jout["m1ZTol"] = m1ZTol
 jout["bestCorrectNumeratorM1"] = bestCorrectNumeratorM1
 jout["bestCorrectDenominatorM1"] = bestCorrectDenominatorM1
 
 jout["bestM2pval"] = bestM2pval
+jout["bestM2pvalInverse"] = (1.0 / bestM2pval) if bestM2pval != 0 else pvalInverseCap
 jout["m2ZTol"] = m2ZTol
 jout["bestCorrectNumeratorM2"] = bestCorrectNumeratorM2
 jout["bestCorrectDenominatorM2"] = bestCorrectDenominatorM2
 
 jout["bestM3pval"] = bestM3pval
+jout["bestM3pvalInverse"] = (1.0 / bestM3pval) if bestM3pval != 0 else pvalInverseCap
 jout["m3ZTol"] = m3ZTol
 jout["bestCorrectNumeratorM3"] = bestCorrectNumeratorM3
 jout["bestCorrectDenominatorM3"] = bestCorrectDenominatorM3
