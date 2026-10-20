@@ -120,11 +120,23 @@ RUN_METHOD = "optimize"
 # adjustedSortino1
 OPT_TARGET = "bestM1pvalInverse"      # top-level status-JSON key to MAXIMIZE;
                                       # any numeric key works (e.g. sortino2)
+# second status-JSON key to MINIMIZE, folded into the objective as a weighted
+# penalty:   objective = OPT_TARGET  -  OPT_MIN_TARGET_WEIGHT * OPT_MIN_TARGET
+# (maximized).  The weight scales the small penalty metric up toward OPT_TARGET's
+# magnitude: bestM1pvalInverse runs large (~50-100+), while badrunsequenceMax is a
+# short streak length (~2-10), so tune the weight to set how much a long bad
+# predict streak costs relative to a better p-value.  Set OPT_MIN_TARGET_WEIGHT=0
+# to recover the plain single-target (OPT_TARGET only) objective.
+OPT_MIN_TARGET = "badrunsequenceMax"
+OPT_MIN_TARGET_WEIGHT = 5.0
+# human-readable objective label (headers / best-file / console), e.g.
+#   bestM1pvalInverse - 5.0*badrunsequenceMax
+OPT_LABEL = f"{OPT_TARGET} - {OPT_MIN_TARGET_WEIGHT}*{OPT_MIN_TARGET}"
 OPT_MAX_RUNS = 150                    # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (20, 200)      # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (2, 2)          # (min, max) inclusive search range
 OPT_KNNVARCUTOFF_RANGE = (50, 950)    # (min, max) inclusive search range; integer >= 0
-OPT_ANNEALMAXITER_RANGE = (1, 5000)    # (min, max) inclusive search range; integer >= 1
+OPT_ANNEALMAXITER_RANGE = (1, 1000)    # (min, max) inclusive search range; integer >= 1
 OPT_ELASTICALPHA_RANGE = (1e-6, 1.0)  # (min, max) inclusive search range; float > 0, searched log-scale
                                       # low floor 1e-6 so the log search covers very small (near-zero)
                                       # alphas, where weak predictors survive; log-uniform gives each
@@ -178,7 +190,7 @@ class RunResult:
     annealmaxiter: int
     elasticalpha: float
     metrics: dict[str, float | str]   # status key -> value
-    target: float | str              # value of OPT_TARGET (the optimize objective)
+    target: float | str              # composite objective (compute_objective); "ERROR" if a component failed
     rundir: str                      # this run's output subdirectory name (the tag)
 
 
@@ -294,11 +306,13 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int,
         print(f"warning: no 'status' file produced in {rundir} for {tag}",
               file=sys.stderr)
 
-    # read the display metrics plus the objective (dedup, preserving order)
-    keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET]))
+    # read the display metrics plus both objective components (dedup, preserve order)
+    keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET, OPT_MIN_TARGET]))
     metrics = read_status_values(status, keys)
-    target = metrics.get(OPT_TARGET, "ERROR")
-    print(f"=== {tag}  target({OPT_TARGET})={target} ===")
+    target = compute_objective(metrics)
+    print(f"=== {tag}  objective({OPT_LABEL})={target} "
+          f"[{OPT_TARGET}={metrics.get(OPT_TARGET)}, "
+          f"{OPT_MIN_TARGET}={metrics.get(OPT_MIN_TARGET)}] ===")
     return RunResult(windowsize, neighbors, knnvarcutoff, annealmaxiter,
                      elasticalpha, metrics, target, tag)
 
@@ -311,14 +325,15 @@ def _fmt_metric(value: float | str) -> str:
 def format_table(results: list[RunResult], timestamp: str) -> str:
     """Render the results as an auto-width text table (trailing newline).
 
-    Columns are the three parameters followed by one column per TABLE_KEYS entry
-    (plus OPT_TARGET if not already listed).  The objective column is starred.
+    Columns are the parameters, the starred composite objective, then one column
+    per TABLE_KEYS entry (plus both objective components if not already listed).
     """
-    # metric columns: the configured keys, with OPT_TARGET appended if missing
-    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET]))
+    # metric columns: the configured keys, with both objective components appended
+    # if missing.  the composite objective itself is a separate starred column.
+    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET, OPT_MIN_TARGET]))
     headers = ["windowsize", "neighbors", "knnvarcutoff", "annealmaxiter",
-               "elasticalpha"]
-    headers += [k + ("*" if k == OPT_TARGET else "") for k in metric_keys]
+               "elasticalpha", "objective*"]
+    headers += metric_keys
     # trailing columns: symbols studied (underscore-joined for easy spreadsheet
     # import) and the run's output subdirectory name (to locate its full output)
     headers += ["symbols", "rundir"]
@@ -326,7 +341,7 @@ def format_table(results: list[RunResult], timestamp: str) -> str:
     symbols_cell = "_".join(SYMBOLS.split()) if SYMBOLS else ""
     rows = [
         [str(r.windowsize), str(r.neighbors), str(r.knnvarcutoff),
-         str(r.annealmaxiter), _fmt_alpha(r.elasticalpha)]
+         str(r.annealmaxiter), _fmt_alpha(r.elasticalpha), _fmt_metric(r.target)]
         + [_fmt_metric(r.metrics.get(k, "ERROR")) for k in metric_keys]
         + [symbols_cell, r.rundir]
         for r in results
@@ -342,7 +357,7 @@ def format_table(results: list[RunResult], timestamp: str) -> str:
 
     out = [
         f"# windowsize/neighbors/knnvarcutoff parameter study results  ({timestamp})",
-        f"# objective (*) = {OPT_TARGET}",
+        f"# objective (*) = {OPT_LABEL}",
         line(headers),
         line(["-" * w for w in widths]),
     ]
@@ -365,7 +380,7 @@ def write_objective_csv(results: list[RunResult], csv_path: Path) -> None:
     don't corrupt the convergence curve.  Columns after the objective are the
     parameters and all metric columns, mirroring the text table.
     """
-    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET]))
+    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET, OPT_MIN_TARGET]))
     symbols_cell = "_".join(SYMBOLS.split()) if SYMBOLS else ""
     header = (["run", "objective", "best_so_far", "windowsize", "neighbors",
                "knnvarcutoff", "annealmaxiter", "elasticalpha"]
@@ -389,6 +404,21 @@ def write_objective_csv(results: list[RunResult], csv_path: Path) -> None:
                 + [symbols_cell, r.rundir])
 
 
+def compute_objective(metrics: dict) -> "float | str":
+    """Composite objective to MAXIMIZE, from two status-JSON metrics:
+
+        objective = metrics[OPT_TARGET] - OPT_MIN_TARGET_WEIGHT * metrics[OPT_MIN_TARGET]
+
+    Returns a float, or "ERROR" if either component is missing/non-numeric, so
+    numeric_target() maps the run to OPT_FAIL_PENALTY (a failed run can't win).
+    """
+    a = metrics.get(OPT_TARGET)
+    b = metrics.get(OPT_MIN_TARGET)
+    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+        return "ERROR"
+    return a - OPT_MIN_TARGET_WEIGHT * b
+
+
 def numeric_target(result: RunResult, penalty: float) -> float:
     """The run's objective value as a float; failed/ERROR runs map to `penalty`."""
     return float(result.target) if isinstance(result.target, (int, float)) else penalty
@@ -408,7 +438,7 @@ def run_grid() -> list[RunResult]:
 
 
 def run_optimize() -> list[RunResult]:
-    """Optuna (TPE) search maximizing OPT_TARGET; returns the unique runs performed.
+    """Optuna (TPE) search maximizing the composite objective; returns unique runs.
 
     Each trial proposes a (windowsize, neighbors, knnvarcutoff) point, evaluated
     by a real run-defaults.sh run.  Results are cached so a repeated suggestion
@@ -417,7 +447,7 @@ def run_optimize() -> list[RunResult]:
     import optuna
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)  # quiet per-trial spam
-    print(f"optuna TPE search: up to {OPT_MAX_RUNS} trials, maximizing {OPT_TARGET}")
+    print(f"optuna TPE search: up to {OPT_MAX_RUNS} trials, maximizing {OPT_LABEL}")
     print(f"  windowsize    in {OPT_WINDOWSIZE_RANGE} step {OPT_WINDOWSIZE_STEP}")
     print(f"  neighbors     in {OPT_NEIGHBORS_RANGE} step {OPT_NEIGHBORS_STEP}")
     print(f"  knnvarcutoff  in {OPT_KNNVARCUTOFF_RANGE} step {OPT_KNNVARCUTOFF_STEP}")
@@ -482,7 +512,7 @@ def run_optimize() -> list[RunResult]:
             f"knnvarcutoff:   {best.params['knnvarcutoff']}\n"
             f"annealmaxiter:  {best.params['annealmaxiter']}\n"
             f"elasticalpha:   {_fmt_alpha(best.params['elasticalpha'])}\n"
-            f"objective:      {OPT_TARGET} = {best.value}\n"
+            f"objective:      {OPT_LABEL} = {best.value}\n"
             f"run subdir:     {tag}/\n"
         )
         tmp = best_file.with_suffix(".tmp")
@@ -500,7 +530,7 @@ def run_optimize() -> list[RunResult]:
           f"neighbors={best['neighbors']} knnvarcutoff={best['knnvarcutoff']} "
           f"annealmaxiter={best['annealmaxiter']} "
           f"elasticalpha={_fmt_alpha(best['elasticalpha'])} "
-          f"{OPT_TARGET}={study.best_value} "
+          f"objective({OPT_LABEL})={study.best_value} "
           f"({len(study.trials)} trials, {len(results)} unique runs) ===")
     print(f"=== best-so-far file: {best_file} ===")
     return results
@@ -545,7 +575,7 @@ def main() -> None:
     write_objective_csv(results, csv_file)
 
     print(f"\n=== results: params vs sharpe1/sharpe2/sharpe3 "
-          f"(objective: target={OPT_TARGET}) ===")
+          f"(objective: {OPT_LABEL}) ===")
     print(table, end="")
     print(f"=== results table written to {table_file} ===")
     print(f"=== objective time series (for convergence plot) written to "

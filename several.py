@@ -3928,6 +3928,19 @@ for forecastrow in range(startrow,ntrials+1):
 
       jout["running_tallies"] = Larray;
 
+      # discrete numeric versions of the ztol bad-predict-sequence metrics printed
+      # in L8/L9/L10 (same key names used by the non-ztol block; on the final row
+      # this ztol block is what survives, matching the printed ztol lines).
+      if len(badrunsequenceZTol) > 0:
+        jout["badrunsequenceMax"] = int(numpy.max(badrunsequenceZTol))
+        jout["meanbad"] = float(numpy.mean(brsNoZeroZTol))
+      if len(badrunsequence2ZTol) > 0:
+        jout["badrunsequence2Max"] = int(numpy.max(badrunsequence2ZTol))
+        jout["meanbad2"] = float(numpy.mean(brsNoZero2ZTol))
+      if len(badrunsequence3ZTol) > 0:
+        jout["badrunsequence3Max"] = int(numpy.max(badrunsequence3ZTol))
+        jout["meanbad3"] = float(numpy.mean(brsNoZero3ZTol))
+
       # plot the bad run stair plots for the ZTol cases (overwrite the orig for now)
       # note:  we are using ymax previously computed for the non zero tol'd plots
       # hence we should maybe not get rid of the non zero tol'd plots code
@@ -4255,6 +4268,18 @@ for forecastrow in range(startrow,ntrials+1):
     L6 = "coinflips to achieve backtest model 2 " + str(prob2)[:9] + " : " + probmsg(prob2)
     L7 = "coinflips to achieve backtest model 3 " + str(prob3)[:9] + " : " + probmsg(prob3)
 
+    # discrete numeric versions of the formatted status-line metrics, for JSON
+    # consumers / optimizers.  forecastcorrect* and prob* are not ztol-specific, so
+    # written every row (final row keeps the latest).  bad-run max/mean are written
+    # with the ztol guard below (mirrors running_tallies) so the ztol block wins on
+    # the final row.
+    jout["forecastcorrect"]  = int(forecastcorrect)
+    jout["forecastcorrect2"] = int(forecastcorrect2)
+    jout["forecastcorrect3"] = int(forecastcorrect3)
+    jout["prob1"] = float(prob1)
+    jout["prob2"] = float(prob2)
+    jout["prob3"] = float(prob3)
+
     # redo these at the end with the ztol'd versions
 
     meanbad = str(numpy.mean(brsNoZero))
@@ -4301,7 +4326,18 @@ for forecastrow in range(startrow,ntrials+1):
     # remove ... this is now assigned when the ztol versions of bad run metrics are computed, above 
     # now we want only the intermediate "while backtesting" runs to show this since we dont have ztol version yet
     if forecastrow != ntrials:
-      jout["running_tallies"] = Larray; 
+      jout["running_tallies"] = Larray;
+      # plain (non-ztol) bad-run metrics on intermediate rows; the ztol block
+      # overwrites these on the final row.  same key names as the ztol block.
+      if len(badrunsequence) > 0:
+        jout["badrunsequenceMax"] = int(numpy.max(badrunsequence))
+        jout["meanbad"] = float(numpy.mean(brsNoZero))
+      if len(badrunsequence2) > 0:
+        jout["badrunsequence2Max"] = int(numpy.max(badrunsequence2))
+        jout["meanbad2"] = float(numpy.mean(brsNoZero2))
+      if len(badrunsequence3) > 0:
+        jout["badrunsequence3Max"] = int(numpy.max(badrunsequence3))
+        jout["meanbad3"] = float(numpy.mean(brsNoZero3))
 
     # metrics for linear & lars if any
 
