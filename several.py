@@ -249,6 +249,13 @@ annealStall=20
 # per model 1 solve.
 annealMaxiter=100 # set small when we don't care about this model, for speed
 
+# capture + plot the dual_annealing (model 1) convergence trajectory to
+# annealConvergence.pdf.  flip to False to shut it off.  only has an effect when
+# useAnneal=1 (BFGS runs record nothing).  each model 1 solve (initial + masked
+# re-solve, per backtest day) contributes one objective-vs-iteration curve.
+plotAnnealConvergence = True
+annealConvergenceRuns = [] # list of (label, [(f, best_so_far), ...]) per solve
+
 diffvol=1 # 0 do not daily difference the volatility, 1 daily difference the volatility
 
 stationaritystudy=True # True: run ADF/KPSS stationarity tests on every column of the
@@ -1711,25 +1718,33 @@ theobjPreMask_time = 0.0
 origSlowPath = False
 
 
-def makeStallCallback(patience):
+def makeStallCallback(patience, history=None):
   """Build a dual_annealing callback that early-stops on a stall.
 
   dual_annealing calls the callback for every minimum it finds.  We track the
   best objective seen so far and count consecutive callbacks that fail to beat
   it by a meaningful margin (1e-6); after `patience` such stalled reports we
   return True, which tells dual_annealing to stop.  patience <= 0 disables
-  early stopping (returns None, so maxiter alone governs the run)."""
-  if patience <= 0:
+  early stopping (maxiter alone governs the run).
+
+  If `history` is a list, each callback appends (f, best_so_far) to it so the
+  solve's convergence trajectory can be plotted later (annealing convergence
+  plot).  When there is nothing to do (no early stop and no history) we return
+  None so dual_annealing runs with no callback at all."""
+  if patience <= 0 and history is None:
     return None
   state = {'best': None, 'stall': 0}
   def cb(x, f, context):
-    if state['best'] is None or f < state['best'] - 1e-6:
+    improved = state['best'] is None or f < state['best'] - 1e-6
+    if improved:
       state['best'] = f
       state['stall'] = 0
     else:
       state['stall'] += 1
-      if state['stall'] >= patience:
-        return True
+    if history is not None:
+      history.append((f, state['best']))
+    if patience > 0 and not improved and state['stall'] >= patience:
+      return True
     return False
   return cb
 
@@ -2107,9 +2122,12 @@ for forecastrow in range(startrow,ntrials+1):
     # makes BFGS terminate at the all-ones start; annealing can move it.
     saBounds = [(d['lower'], d['upper'])] * len(B)
     saObj = theobjAbs if model1minabs == 1 else theobj
+    annealHist = [] if plotAnnealConvergence else None
     theresult = scipy.optimize.dual_annealing(saObj, saBounds, x0=B, seed=100,
                                               maxiter=annealMaxiter,
-                                              callback=makeStallCallback(annealStall))
+                                              callback=makeStallCallback(annealStall, annealHist))
+    if plotAnnealConvergence:
+      annealConvergenceRuns.append(("initial solve", annealHist))
 
   logSolveResult("initial solve", theresult)
 
@@ -2856,9 +2874,12 @@ for forecastrow in range(startrow,ntrials+1):
       # instead of BFGS (see the initial-solve site above for rationale).
       saBounds = [(d['lower'], d['upper'])] * len(B)
       saObj = boundTheObjAbs if model1minabs == 1 else boundTheObj
+      annealHist = [] if plotAnnealConvergence else None
       theresult = scipy.optimize.dual_annealing(saObj, saBounds, x0=B, seed=100,
                                                 maxiter=annealMaxiter,
-                                                callback=makeStallCallback(annealStall))
+                                                callback=makeStallCallback(annealStall, annealHist))
+      if plotAnnealConvergence:
+        annealConvergenceRuns.append(("masked re-solve", annealHist))
 
     logSolveResult("masked re-solve", theresult)
 
@@ -4322,6 +4343,41 @@ for forecastrow in range(startrow,ntrials+1):
 
 print("all row times = ", sumOfRowTimes)
 print("avg row time = ", sumOfRowTimes/sumOfRowTimesCount)
+
+# annealing optimizer convergence plot (model 1 dual_annealing solves).  flip
+# plotAnnealConvergence to False to shut this off.  annealConvergenceRuns is only
+# populated when useAnneal=1, so with BFGS this is a no-op.
+if plotAnnealConvergence and len(annealConvergenceRuns) > 0:
+  if model1minabs == 1:
+    objdesc = "sum abs residuals (lower = better)"
+  else:
+    objdesc = "-ncorrect (lower = better)"
+  # one subplot per data set (don't overlay): initial solve on top, masked
+  # re-solve on the bottom, each with its own x/y axes.
+  convfig = figure()
+  axByLabel = {"initial solve":  (convfig.add_subplot(211), 'C0'),
+               "masked re-solve": (convfig.add_subplot(212), 'C1')}
+  countByLabel = {"initial solve": 0, "masked re-solve": 0}
+  for label, hist in annealConvergenceRuns:
+    if hist is None or len(hist) == 0 or label not in axByLabel:
+      continue
+    ax, color = axByLabel[label]
+    xs = list(range(0, len(hist)))
+    bestsofar = [pair[1] for pair in hist]   # running best objective
+    ax.plot(xs, bestsofar, color=color, alpha=0.35, marker='o', markersize=2,
+            linestyle='None')
+    countByLabel[label] += 1
+  # run-level params at the top of the whole figure (same for every solve here)
+  convfig.suptitle("model 1 annealing convergence -- annealMaxiter=%d, annealStall=%d"
+                   % (annealMaxiter, annealStall), fontsize=10)
+  for label, (ax, color) in axByLabel.items():
+    ax.set_xlabel("dual_annealing callback index (minimum found)", fontsize=8)
+    ax.set_ylabel("best objective so far:\n" + objdesc, fontsize=7)
+    ax.set_title("%s (%d solves)" % (label, countByLabel[label]), fontsize=8)
+    ax.tick_params(axis='both', which='major', labelsize=7)
+  convfig.tight_layout()
+  convfig.savefig('annealConvergence.pdf')
+  print("wrote annealConvergence.pdf (", len(annealConvergenceRuns), "solve trajectories)")
 
 meanLinearAdjR2 = numpy.mean(linearAdjR2List)
 stdLinearAdjR2 = numpy.std(linearAdjR2List)
