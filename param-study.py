@@ -127,11 +127,22 @@ OPT_TARGET = "bestM1pvalInverse"      # top-level status-JSON key to MAXIMIZE;
 # short streak length (~2-10), so tune the weight to set how much a long bad
 # predict streak costs relative to a better p-value.  Set OPT_MIN_TARGET_WEIGHT=0
 # to recover the plain single-target (OPT_TARGET only) objective.
+# status-JSON key to MAXIMIZE as a weighted ADD term: the number of trades at the
+# best-pval tolerance.  bestCorrectDenominatorM1 is the denominator of the SAME
+# p-value computation that produced bestM1pval (captured at the best tolerance in
+# the scan), so it refers to the same underlying situation.  Added to fight sparse
+# trading -- the inverse-pval objective alone rewards a few high-confidence trades,
+# so reward trade count too.  Set OPT_ADD_TARGET_WEIGHT=0 to drop this term.
+# NOTE: bestM1pvalInverse rewards sparse perfect streaks heavily (7/7 -> ~128), so
+# this weight likely needs to be sizable to actually move the search off sparsity.
+OPT_ADD_TARGET = "bestCorrectDenominatorM1"
+OPT_ADD_TARGET_WEIGHT = 1.0
 OPT_MIN_TARGET = "badrunsequenceMax"
 OPT_MIN_TARGET_WEIGHT = 5.0
 # human-readable objective label (headers / best-file / console), e.g.
-#   bestM1pvalInverse - 5.0*badrunsequenceMax
-OPT_LABEL = f"{OPT_TARGET} - {OPT_MIN_TARGET_WEIGHT}*{OPT_MIN_TARGET}"
+#   bestM1pvalInverse + 1.0*bestCorrectDenominatorM1 - 5.0*badrunsequenceMax
+OPT_LABEL = (f"{OPT_TARGET} + {OPT_ADD_TARGET_WEIGHT}*{OPT_ADD_TARGET}"
+             f" - {OPT_MIN_TARGET_WEIGHT}*{OPT_MIN_TARGET}")
 OPT_MAX_RUNS = 150                    # number of Optuna trials (== run-defaults runs)
 OPT_WINDOWSIZE_RANGE = (20, 200)      # (min, max) inclusive search range
 OPT_NEIGHBORS_RANGE = (2, 2)          # (min, max) inclusive search range
@@ -307,7 +318,7 @@ def run_one(windowsize: int, neighbors: int, knnvarcutoff: int,
               file=sys.stderr)
 
     # read the display metrics plus both objective components (dedup, preserve order)
-    keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET, OPT_MIN_TARGET]))
+    keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET, OPT_ADD_TARGET, OPT_MIN_TARGET]))
     metrics = read_status_values(status, keys)
     target = compute_objective(metrics)
     print(f"=== {tag}  objective({OPT_LABEL})={target} "
@@ -330,7 +341,7 @@ def format_table(results: list[RunResult], timestamp: str) -> str:
     """
     # metric columns: the configured keys, with both objective components appended
     # if missing.  the composite objective itself is a separate starred column.
-    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET, OPT_MIN_TARGET]))
+    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET, OPT_ADD_TARGET, OPT_MIN_TARGET]))
     headers = ["windowsize", "neighbors", "knnvarcutoff", "annealmaxiter",
                "elasticalpha", "objective*"]
     headers += metric_keys
@@ -380,7 +391,7 @@ def write_objective_csv(results: list[RunResult], csv_path: Path) -> None:
     don't corrupt the convergence curve.  Columns after the objective are the
     parameters and all metric columns, mirroring the text table.
     """
-    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET, OPT_MIN_TARGET]))
+    metric_keys = list(dict.fromkeys(TABLE_KEYS + [OPT_TARGET, OPT_ADD_TARGET, OPT_MIN_TARGET]))
     symbols_cell = "_".join(SYMBOLS.split()) if SYMBOLS else ""
     header = (["run", "objective", "best_so_far", "windowsize", "neighbors",
                "knnvarcutoff", "annealmaxiter", "elasticalpha"]
@@ -405,18 +416,21 @@ def write_objective_csv(results: list[RunResult], csv_path: Path) -> None:
 
 
 def compute_objective(metrics: dict) -> "float | str":
-    """Composite objective to MAXIMIZE, from two status-JSON metrics:
+    """Composite objective to MAXIMIZE, from three status-JSON metrics:
 
-        objective = metrics[OPT_TARGET] - OPT_MIN_TARGET_WEIGHT * metrics[OPT_MIN_TARGET]
+        objective = metrics[OPT_TARGET]
+                  + OPT_ADD_TARGET_WEIGHT * metrics[OPT_ADD_TARGET]
+                  - OPT_MIN_TARGET_WEIGHT * metrics[OPT_MIN_TARGET]
 
-    Returns a float, or "ERROR" if either component is missing/non-numeric, so
+    Returns a float, or "ERROR" if any component is missing/non-numeric, so
     numeric_target() maps the run to OPT_FAIL_PENALTY (a failed run can't win).
     """
     a = metrics.get(OPT_TARGET)
+    c = metrics.get(OPT_ADD_TARGET)
     b = metrics.get(OPT_MIN_TARGET)
-    if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+    if not all(isinstance(v, (int, float)) for v in (a, b, c)):
         return "ERROR"
-    return a - OPT_MIN_TARGET_WEIGHT * b
+    return a + OPT_ADD_TARGET_WEIGHT * c - OPT_MIN_TARGET_WEIGHT * b
 
 
 def numeric_target(result: RunResult, penalty: float) -> float:
