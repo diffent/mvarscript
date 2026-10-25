@@ -161,6 +161,11 @@ OPT_ANNEALMAXITER_STEP = 50           # search annealmaxiter on this integer gri
 OPT_SEED = 42                         # RNG seed for reproducible trial suggestions
 OPT_FAIL_PENALTY = -1e6               # sharpe3 assigned to a failed/ERROR run
 OPT_BEST_FILE = "current_best.txt"     # live "best so far" file, refreshed each trial
+# Persistent Optuna storage: trial history + sampler state live in this SQLite
+# DB (tagged per-symbols like OPT_BEST_FILE), so killing the process mid-study
+# and rerunning resumes from where it left off instead of restarting at trial 0.
+OPT_STUDY_DB = "param-study.optuna.db"
+OPT_STUDY_NAME = "param-study"
 
 def _run_tag(name: str) -> str:
     """Prefix a run subdir / results filename with the symbols and optimize target.
@@ -500,6 +505,11 @@ def run_optimize() -> list[RunResult]:
             print(f"=== reusing cached run for windowsize={ws},neighbors={nb},"
                   f"knnvarcutoff={kv},annealmaxiter={am},"
                   f"elasticalpha={_fmt_alpha(ea)} ===")
+        # persist this trial's result in the DB so a resumed study (after a kill)
+        # can rebuild `results`/`cache` without re-running the backtest
+        trial.set_user_attr("metrics", result.metrics)
+        trial.set_user_attr("target", result.target)
+        trial.set_user_attr("rundir", result.rundir)
         return numeric_target(result, OPT_FAIL_PENALTY)
 
     def write_best(study: "optuna.Study", trial: "optuna.trial.FrozenTrial") -> None:
@@ -533,11 +543,49 @@ def run_optimize() -> list[RunResult]:
         tmp.write_text(text)
         os.replace(tmp, best_file)  # atomic on the same filesystem
 
+    # persistent storage so a killed study resumes instead of restarting; the DB
+    # is tagged per-symbols (like best_file) so concurrent symbol studies don't
+    # share one study.  load_if_exists=True reloads prior trials + sampler state.
+    db_path = SCRIPT_DIR / _tagged(OPT_STUDY_DB)
     study = optuna.create_study(
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=OPT_SEED),
+        storage=f"sqlite:///{db_path}",
+        study_name=OPT_STUDY_NAME,
+        load_if_exists=True,
     )
-    study.optimize(objective, n_trials=OPT_MAX_RUNS, callbacks=[write_best])
+
+    # resume: rebuild the in-memory results/cache from completed trials already in
+    # the DB, so prior runs appear in the final table and their points aren't
+    # re-evaluated.  Trials are numbered in order, so this preserves run order.
+    completed = study.get_trials(
+        deepcopy=False, states=(optuna.trial.TrialState.COMPLETE,))
+    for t in completed:
+        if "rundir" not in t.user_attrs:
+            continue  # pre-upgrade trial without stashed result; skip
+        p = t.params
+        prior = RunResult(
+            p["windowsize"], p["neighbors"], p["knnvarcutoff"],
+            p["annealmaxiter"], p["elasticalpha"],
+            t.user_attrs["metrics"], t.user_attrs["target"],
+            t.user_attrs["rundir"])
+        key = (p["windowsize"], p["neighbors"], p["knnvarcutoff"],
+               p["annealmaxiter"], _fmt_alpha(p["elasticalpha"]))
+        if key not in cache:
+            cache[key] = prior
+            results.append(prior)
+
+    # budget is counted in TRIALS (some are cache hits), matching write_best's
+    # "trials done" and the original n_trials=OPT_MAX_RUNS; n_trials counts only
+    # NEW trials this call, so ask for whatever budget remains.
+    done = len(completed)
+    remaining = max(0, OPT_MAX_RUNS - done)
+    if done:
+        print(f"=== resuming: {done}/{OPT_MAX_RUNS} trial(s) "
+              f"({len(cache)} unique point(s)) loaded from {db_path}; "
+              f"running {remaining} more ===")
+    if remaining:
+        study.optimize(objective, n_trials=remaining, callbacks=[write_best])
 
     best = study.best_params
     print(f"\n=== optuna best: windowsize={best['windowsize']} "
