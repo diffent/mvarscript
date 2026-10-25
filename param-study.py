@@ -445,6 +445,9 @@ def numeric_target(result: RunResult, penalty: float) -> float:
 
 def run_grid() -> list[RunResult]:
     """Exhaustive grid search over WINDOWSIZES x NEIGHBORS x KNNVARCUTOFFS."""
+    # a grid run is always fresh (no resume), so drop any stale cache and let the
+    # first run re-pull current data (symbols may have changed since a prior run).
+    MERGEDRAW_CACHE.unlink(missing_ok=True)
     print("windowsize values:  ", WINDOWSIZES)
     print("neighbors values:   ", NEIGHBORS)
     print("knnvarcutoff values:", KNNVARCUTOFFS)
@@ -581,9 +584,29 @@ def run_optimize() -> list[RunResult]:
     done = len(completed)
     remaining = max(0, OPT_MAX_RUNS - done)
     if done:
-        print(f"=== resuming: {done}/{OPT_MAX_RUNS} trial(s) "
-              f"({len(cache)} unique point(s)) loaded from {db_path}; "
-              f"running {remaining} more ===")
+        # RESUME: reuse the original study's data cache so resumed trials are
+        # scored on the SAME dataset as the pre-kill trials.  Re-pulling here
+        # (e.g. on a later day) would feed newer data to the new trials and make
+        # their objectives incomparable to the old ones.  Mark the first run as
+        # already done so run_one() copies the cache in instead of pulling.
+        global _first_run_done
+        if MERGEDRAW_CACHE.is_file():
+            _first_run_done = True
+            print(f"=== resuming: {done}/{OPT_MAX_RUNS} trial(s) "
+                  f"({len(cache)} unique point(s)) loaded from {db_path}; "
+                  f"reusing original dataset {MERGEDRAW_CACHE.name}; "
+                  f"running {remaining} more ===")
+        else:
+            # cache gone (e.g. manually deleted): we must re-pull, and on a later
+            # day that data may differ from the original trials' -- warn loudly.
+            print(f"=== resuming: {done}/{OPT_MAX_RUNS} trial(s) loaded, but "
+                  f"data cache {MERGEDRAW_CACHE.name} is MISSING -- the first "
+                  f"resumed run will RE-PULL fresh data, which may differ from "
+                  f"the original trials' dataset; running {remaining} more ===",
+                  file=sys.stderr)
+    else:
+        # FRESH study: drop any stale cache so the first run pulls current data.
+        MERGEDRAW_CACHE.unlink(missing_ok=True)
     if remaining:
         study.optimize(objective, n_trials=remaining, callbacks=[write_best])
 
@@ -602,9 +625,12 @@ def main() -> None:
     print("=== parameter study ===")
     print(f"run method: {RUN_METHOD}")
 
-    # drop any stale merged-raw cache so the first run of THIS study always pulls
-    # fresh data (symbols may have changed since a previous study left a cache).
-    MERGEDRAW_CACHE.unlink(missing_ok=True)
+    # NOTE: the merged-raw data cache is NOT dropped here.  Whether to re-pull
+    # fresh data or reuse the existing cache depends on fresh-vs-resume, which is
+    # only known once the study DB is inspected, so each run method decides:
+    # run_grid() always re-pulls (no resume concept); run_optimize() re-pulls for
+    # a fresh study but REUSES the cache on resume, so every trial in one study --
+    # across kills and restarts on different days -- is scored on one dataset.
 
     if RUN_METHOD == "grid":
         results = run_grid()
